@@ -39,3 +39,10 @@ management:
 info:
   application:
     name: ${spring.application.name}
+
+security:
+  jwt:
+    issuer: ${JWT_ISSUER:hotel-booking}
+    audience: ${JWT_AUDIENCE:hotel-api}
+    public-key: ${JWT_PUBLIC_KEY:}
+    private-key: ${JWT_PRIVATE_KEY:}
