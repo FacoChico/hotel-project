@@ -1,0 +1,85 @@
+server:
+  address: ${SERVER_ADDRESS:127.0.0.1}
+  port: ${SERVER_PORT:8080}
+
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      server:
+        webmvc:
+          routes:
+            - id: hotels-collection
+              uri: lb://hotel-service
+              predicates:
+                - Path=/api/hotels
+                - Method=GET,POST
+            - id: hotel-item
+              uri: lb://hotel-service
+              predicates:
+                - Path=/api/hotels/{id}
+                - Method=GET,PATCH,DELETE
+            - id: rooms-collection
+              uri: lb://hotel-service
+              predicates:
+                - Path=/api/rooms
+                - Method=GET,POST
+            - id: room-item
+              uri: lb://hotel-service
+              predicates:
+                - Path=/api/rooms/{id}
+                - Method=GET,PATCH,DELETE
+            - id: room-recommendations-and-statistics
+              uri: lb://hotel-service
+              predicates:
+                - Path=/api/rooms/recommend,/api/rooms/statistics
+                - Method=GET
+            - id: users-collection
+              uri: lb://booking-service
+              predicates:
+                - Path=/api/users
+                - Method=GET,POST
+            - id: user-item
+              uri: lb://booking-service
+              predicates:
+                - Path=/api/users/{id}
+                - Method=GET,PATCH,DELETE
+            - id: user-authentication
+              uri: lb://booking-service
+              predicates:
+                - Path=/api/users/register,/api/users/auth
+                - Method=POST
+            - id: bookings-collection
+              uri: lb://booking-service
+              predicates:
+                - Path=/api/bookings
+                - Method=GET,POST
+            - id: booking-item
+              uri: lb://booking-service
+              predicates:
+                - Path=/api/bookings/{id}
+                - Method=GET,DELETE
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
+  instance:
+    hostname: ${SERVICE_HOSTNAME:localhost}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+  info:
+    env:
+      enabled: true
+
+info:
+  application:
+    name: ${spring.application.name}

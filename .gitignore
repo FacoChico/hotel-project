@@ -1,0 +1,19 @@
+.DS_Store
+.idea/
+*.iml
+**/.gradle/
+**/build/
+.run/
+.env
+.env.*
+!.env.example
+secrets/
+*.pem
+*.key
+*.p12
+*.jks
+*.log
+
+# Local files
+/AGENTS.md
+/local/
