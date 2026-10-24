@@ -1,4 +1,7 @@
-package com.example.hotel.booking.user;
+package com.example.hotel.booking.repository;
+
+import com.example.hotel.booking.domain.User;
+import com.example.hotel.booking.domain.UserRole;
 
 import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.MigrationInfo;
@@ -11,7 +14,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 
 import jakarta.persistence.EntityManager;
 
-import static com.example.hotel.booking.user.UserRole.USER;
+import static com.example.hotel.booking.domain.UserRole.USER;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 

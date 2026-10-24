@@ -13,52 +13,52 @@ spring:
             - id: hotels-collection
               uri: lb://hotel-service
               predicates:
-                - Path=/api/hotels
+                - Path=/api/hotels/v1
                 - Method=GET,POST
             - id: hotel-item
               uri: lb://hotel-service
               predicates:
-                - Path=/api/hotels/{id}
+                - Path=/api/hotels/v1/{id}
                 - Method=GET,PATCH,DELETE
             - id: rooms-collection
               uri: lb://hotel-service
               predicates:
-                - Path=/api/rooms
+                - Path=/api/rooms/v1
                 - Method=GET,POST
             - id: room-item
               uri: lb://hotel-service
               predicates:
-                - Path=/api/rooms/{id}
+                - Path=/api/rooms/v1/{id}
                 - Method=GET,PATCH,DELETE
             - id: room-recommendations-and-statistics
               uri: lb://hotel-service
               predicates:
-                - Path=/api/rooms/recommend,/api/rooms/statistics
+                - Path=/api/rooms/v1/recommend,/api/rooms/v1/statistics
                 - Method=GET
             - id: users-collection
               uri: lb://booking-service
               predicates:
-                - Path=/api/users
+                - Path=/api/users/v1
                 - Method=GET,POST
             - id: user-item
               uri: lb://booking-service
               predicates:
-                - Path=/api/users/{id}
+                - Path=/api/users/v1/{id}
                 - Method=GET,PATCH,DELETE
             - id: user-authentication
               uri: lb://booking-service
               predicates:
-                - Path=/api/users/register,/api/users/auth
+                - Path=/api/users/v1/register,/api/users/v1/auth
                 - Method=POST
             - id: bookings-collection
               uri: lb://booking-service
               predicates:
-                - Path=/api/bookings
+                - Path=/api/bookings/v1
                 - Method=GET,POST
             - id: booking-item
               uri: lb://booking-service
               predicates:
-                - Path=/api/bookings/{id}
+                - Path=/api/bookings/v1/{id}
                 - Method=GET,DELETE
 
 eureka:

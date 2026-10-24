@@ -55,26 +55,26 @@ class GatewayRoutingTests {
     @SneakyThrows
     @ParameterizedTest
     @CsvSource({
-        "GET, /api/hotels, hotel-service",
-        "POST, /api/hotels, hotel-service",
-        "PATCH, /api/hotels/1, hotel-service",
-        "DELETE, /api/hotels/1, hotel-service",
-        "GET, /api/rooms, hotel-service",
-        "POST, /api/rooms, hotel-service",
-        "PATCH, /api/rooms/7, hotel-service",
-        "DELETE, /api/rooms/7, hotel-service",
-        "GET, /api/rooms/recommend, hotel-service",
-        "GET, /api/rooms/statistics, hotel-service",
-        "POST, /api/users/register, booking-service",
-        "POST, /api/users/auth, booking-service",
-        "GET, /api/users, booking-service",
-        "POST, /api/users, booking-service",
-        "PATCH, /api/users/1, booking-service",
-        "DELETE, /api/users/1, booking-service",
-        "POST, /api/bookings, booking-service",
-        "GET, /api/bookings, booking-service",
-        "GET, /api/bookings/abc, booking-service",
-        "DELETE, /api/bookings/abc, booking-service"
+        "GET, /api/hotels/v1, hotel-service",
+        "POST, /api/hotels/v1, hotel-service",
+        "PATCH, /api/hotels/v1/1, hotel-service",
+        "DELETE, /api/hotels/v1/1, hotel-service",
+        "GET, /api/rooms/v1, hotel-service",
+        "POST, /api/rooms/v1, hotel-service",
+        "PATCH, /api/rooms/v1/7, hotel-service",
+        "DELETE, /api/rooms/v1/7, hotel-service",
+        "GET, /api/rooms/v1/recommend, hotel-service",
+        "GET, /api/rooms/v1/statistics, hotel-service",
+        "POST, /api/users/v1/register, booking-service",
+        "POST, /api/users/v1/auth, booking-service",
+        "GET, /api/users/v1, booking-service",
+        "POST, /api/users/v1, booking-service",
+        "PATCH, /api/users/v1/1, booking-service",
+        "DELETE, /api/users/v1/1, booking-service",
+        "POST, /api/bookings/v1, booking-service",
+        "GET, /api/bookings/v1, booking-service",
+        "GET, /api/bookings/v1/abc, booking-service",
+        "DELETE, /api/bookings/v1/abc, booking-service"
     })
     void shouldForwardRequestWhenPublicRouteMatches(String httpMethod, String requestPath, String expectedServiceName) {
         try (var httpClient = newHttpClient()) {
@@ -94,15 +94,24 @@ class GatewayRoutingTests {
     @SneakyThrows
     @ParameterizedTest
     @CsvSource({
-        "POST, /api/rooms/7/confirm-availability",
-        "POST, /api/rooms/7/release",
-        "GET, /api/rooms/7/release",
-        "POST, /api/rooms/7",
-        "PUT, /api/hotels/1",
+        "POST, /api/rooms/v1/7/confirm-availability",
+        "POST, /api/rooms/v1/7/release",
+        "GET, /api/rooms/v1/7/release",
+        "POST, /api/rooms/v1/7",
+        "PUT, /api/hotels/v1/1",
         "GET, /hotel-service/actuator/health",
         "GET, /booking-service/actuator/info",
         "GET, /eureka/apps",
-        "GET, /api/rooms/7/actuator/health"
+        "POST, /api/users/register",
+        "POST, /api/users/auth",
+        "GET, /api/hotels",
+        "GET, /api/rooms",
+        "GET, /api/users",
+        "GET, /api/bookings",
+        "POST, /api/rooms/7/release",
+        "POST, /api/users/v2/register",
+        "GET, /api/rooms/v2",
+        "GET, /api/rooms/v1/7/actuator/health"
     })
     void shouldRejectRequestWhenRouteIsInternalOrUnlisted(String httpMethod, String requestPath) {
         try (var httpClient = newHttpClient()) {

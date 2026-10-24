@@ -2,7 +2,7 @@ package com.example.hotel.booking.security;
 
 import com.example.hotel.booking.config.JwtConfig;
 import com.example.hotel.booking.properties.JwtProperties;
-import com.example.hotel.booking.user.UserRole;
+import com.example.hotel.booking.domain.UserRole;
 import com.nimbusds.jose.crypto.RSASSAVerifier;
 import com.nimbusds.jwt.SignedJWT;
 
