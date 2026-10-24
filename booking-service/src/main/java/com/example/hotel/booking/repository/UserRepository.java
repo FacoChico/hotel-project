@@ -1,4 +1,6 @@
-package com.example.hotel.booking.user;
+package com.example.hotel.booking.repository;
+
+import com.example.hotel.booking.domain.User;
 
 import java.util.Optional;
 

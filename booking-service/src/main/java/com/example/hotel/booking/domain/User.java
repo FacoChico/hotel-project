@@ -1,4 +1,4 @@
-package com.example.hotel.booking.user;
+package com.example.hotel.booking.domain;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

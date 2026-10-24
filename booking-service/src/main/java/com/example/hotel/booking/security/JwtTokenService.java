@@ -1,7 +1,7 @@
 package com.example.hotel.booking.security;
 
 import com.example.hotel.booking.properties.JwtProperties;
-import com.example.hotel.booking.user.UserRole;
+import com.example.hotel.booking.domain.UserRole;
 
 import org.springframework.security.oauth2.jwt.JwsHeader;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
@@ -20,7 +20,7 @@ import static org.springframework.security.oauth2.jose.jws.SignatureAlgorithm.RS
 @Service
 @RequiredArgsConstructor
 public class JwtTokenService {
-    static final long TOKEN_LIFETIME_SECONDS = 3600;
+    public static final long TOKEN_LIFETIME_SECONDS = 3600;
     private final JwtEncoder jwtEncoder;
     private final JwtProperties properties;
     private final Clock jwtClock;
