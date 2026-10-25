@@ -4,7 +4,9 @@ import com.sun.net.httpserver.HttpServer;
 
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
@@ -14,7 +16,9 @@ import org.springframework.test.context.DynamicPropertySource;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Stream;
 
 import lombok.SneakyThrows;
 
@@ -25,6 +29,7 @@ import static java.net.http.HttpRequest.newBuilder;
 import static java.net.http.HttpResponse.BodyHandlers.ofString;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.springframework.boot.test.context.SpringBootTest.WebEnvironment.RANDOM_PORT;
 
 @SpringBootTest(
@@ -78,8 +83,8 @@ class GatewayRoutingTest {
         "DELETE, /api/v1/users/1, booking-service",
         "POST, /api/v1/bookings, booking-service",
         "GET, /api/v1/bookings, booking-service",
-        "GET, /api/v1/bookings/abc, booking-service",
-        "DELETE, /api/v1/bookings/abc, booking-service"
+        "GET, /api/v1/bookings/42, booking-service",
+        "DELETE, /api/v1/bookings/42, booking-service"
     })
     void shouldForwardRequestWhenPublicRouteMatches(String httpMethod, String requestPath, String expectedServiceName) {
         try (var httpClient = newHttpClient()) {
@@ -135,7 +140,13 @@ class GatewayRoutingTest {
         "POST, /api/rooms/7/release",
         "POST, /api/v2/users/register",
         "GET, /api/v2/rooms",
-        "GET, /api/v1/rooms/7/actuator/health"
+        "GET, /api/v1/rooms/7/actuator/health",
+        "PATCH, /api/v1/rooms/recommend",
+        "DELETE, /api/v1/rooms/recommend",
+        "PATCH, /api/v1/rooms/statistics",
+        "DELETE, /api/v1/rooms/statistics",
+        "GET, /api/v1/users/auth",
+        "GET, /api/v1/users/register"
     })
     void shouldRejectRequestWhenRouteIsInternalOrUnlisted(String httpMethod, String requestPath) {
         try (var httpClient = newHttpClient()) {
@@ -148,6 +159,22 @@ class GatewayRoutingTest {
 
             assertThat(response.statusCode()).isEqualTo(404);
             assertThat(BACKEND_REQUEST_COUNT.get()).isEqualTo(backendRequestCountBeforeRequest);
+        }
+    }
+
+    @ParameterizedTest
+    @MethodSource("nonnumericEntityPaths")
+    @SneakyThrows
+    void shouldRejectRequestWhenEntityPathIdIsNotNumeric(String method, String path) {
+        try (final var httpClient = newHttpClient()) {
+            final var requestsBefore = BACKEND_REQUEST_COUNT.get();
+            final var request = newBuilder(URI.create("http://127.0.0.1:" + applicationPort + path))
+                .method(method, noBody()).build();
+
+            final var response = httpClient.send(request, ofString());
+
+            assertThat(response.statusCode()).isEqualTo(404);
+            assertThat(BACKEND_REQUEST_COUNT.get()).isEqualTo(requestsBefore);
         }
     }
 
@@ -220,6 +247,15 @@ class GatewayRoutingTest {
             assertThat(response.headers().firstValue("X-Test-Response").orElseThrow()).isEqualTo("preserved");
             assertThat(response.body()).isEqualTo("{\"code\":\"BACKEND_ERROR\"}");
         }
+    }
+
+    private static Stream<Arguments> nonnumericEntityPaths() {
+        return Stream.of("hotels", "rooms", "users", "bookings")
+            .flatMap(resource -> (resource.equals("bookings")
+                ? List.of("GET", "DELETE")
+                : List.of("GET", "PATCH", "DELETE")).stream()
+                .flatMap(method -> Stream.of("abc", "-1", "1.5")
+                    .map(id -> arguments(method, "/api/v1/" + resource + "/" + id))));
     }
 
     private static HttpServer startTestBackendServer(String serviceName) {

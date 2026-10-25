@@ -364,6 +364,27 @@ class HotelManagementTest {
     }
 
     @ParameterizedTest
+    @CsvSource({
+        "GET, invalid",
+        "PATCH, invalid",
+        "DELETE, invalid",
+        "GET, -1",
+        "PATCH, -1",
+        "DELETE, -1"
+    })
+    @SneakyThrows
+    void shouldReturnNotFoundWhenHotelPathIdIsNotNumeric(String method, String id) {
+        final var payload = method.equals("PATCH")
+            ? Map.of("name", "City Hotel")
+            : null;
+
+        final var result = mockMvc.perform(authenticatedRequest(HttpMethod.valueOf(method),
+            "/api/v1/hotels/" + id, "ADMIN", payload));
+
+        result.andExpect(status().isNotFound());
+    }
+
+    @ParameterizedTest
     @MethodSource("invalidHotelIdentifiers")
     @SneakyThrows
     void shouldRejectRequestWhenHotelIdIsInvalid(String method, String id) {
@@ -473,7 +494,7 @@ class HotelManagementTest {
 
     private static Stream<Arguments> invalidHotelIdentifiers() {
         return Stream.of("GET", "PATCH", "DELETE")
-            .flatMap(method -> Stream.of("0", "-1", "invalid", "9223372036854775808")
+            .flatMap(method -> Stream.of("0", "9223372036854775808")
                 .map(id -> arguments(method, id)));
     }
 }

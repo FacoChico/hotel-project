@@ -305,8 +305,8 @@ class BookingSecurityTests {
             return route()
                 .GET("/api/v1/bookings", request -> ok().body("user"))
                 .POST("/api/v1/bookings", request -> ok().body("user"))
-                .GET("/api/v1/bookings/{id}", request -> ok().body("user"))
-                .DELETE("/api/v1/bookings/{id}", request -> ok().body("user"))
+                .GET("/api/v1/bookings/{id:[0-9]+}", request -> ok().body("user"))
+                .DELETE("/api/v1/bookings/{id:[0-9]+}", request -> ok().body("user"))
                 .build();
         }
     }
