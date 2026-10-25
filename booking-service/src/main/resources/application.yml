@@ -5,6 +5,10 @@ server:
 spring:
   application:
     name: booking-service
+  cloud:
+    loadbalancer:
+      retry:
+        enabled: false
   jackson:
     deserialization:
       fail-on-unknown-properties: true
@@ -56,3 +60,11 @@ security:
     private-key: ${JWT_PRIVATE_KEY:}
   service-jwt:
     audience: ${SERVICE_JWT_AUDIENCE:hotel-internal}
+
+booking:
+  hotel-client:
+    connect-timeout-ms: ${HOTEL_CONNECT_TIMEOUT_MS:1000}
+    read-timeout-ms: ${HOTEL_READ_TIMEOUT_MS:2000}
+    max-attempts: ${HOTEL_MAX_ATTEMPTS:3}
+    backoff-ms: ${HOTEL_BACKOFF_MS:100}
+    operation-timeout-ms: ${BOOKING_OPERATION_TIMEOUT_MS:10000}

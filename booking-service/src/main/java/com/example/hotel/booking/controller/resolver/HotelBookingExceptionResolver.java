@@ -1,6 +1,9 @@
 package com.example.hotel.booking.controller.resolver;
 
+import com.example.hotel.booking.service.exception.BookingCreationException;
+import com.example.hotel.booking.service.exception.BookingIdempotencyConflictException;
 import com.example.hotel.booking.service.exception.EmptyUserUpdateException;
+import com.example.hotel.booking.service.exception.InvalidBookingRequestException;
 import com.example.hotel.booking.service.exception.UserHasBookingsException;
 import com.example.hotel.booking.service.exception.UserNotFoundException;
 import com.example.hotel.booking.service.exception.UsernameAlreadyExistsException;
@@ -31,6 +34,27 @@ import static org.springframework.http.HttpStatus.UNAUTHORIZED;
 
 @RestControllerAdvice
 class HotelBookingExceptionResolver extends ResponseEntityExceptionHandler {
+
+    @ExceptionHandler(BookingCreationException.class)
+    private static ResponseEntity<ProblemDetail> handleBookingFailure(BookingCreationException exception) {
+        final var problem = getProblemDetails(exception.getStatus(), exception.getCode(), exception.getMessage());
+        problem.setProperty("bookingId", exception.getBookingId());
+        problem.setProperty("releasePending", exception.isReleasePending());
+        return ResponseEntity.status(exception.getStatus()).body(problem);
+    }
+
+    @ExceptionHandler(BookingIdempotencyConflictException.class)
+    private static ResponseEntity<ProblemDetail> handleBookingConflict(BookingIdempotencyConflictException exception) {
+        final var problem = getProblemDetails(CONFLICT, "IDEMPOTENCY_CONFLICT", exception.getMessage());
+        problem.setProperty("bookingId", exception.getBookingId());
+        return ResponseEntity.status(CONFLICT).body(problem);
+    }
+
+    @ExceptionHandler(InvalidBookingRequestException.class)
+    private static ResponseEntity<ProblemDetail> handleInvalidBooking(InvalidBookingRequestException exception) {
+        return ResponseEntity.badRequest()
+            .body(getProblemDetails(BAD_REQUEST, "VALIDATION_FAILED", exception.getMessage()));
+    }
 
     @ExceptionHandler(UsernameAlreadyExistsException.class)
     private static ResponseEntity<ProblemDetail> handleUsernameConflict(UsernameAlreadyExistsException exception) {
