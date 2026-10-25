@@ -95,7 +95,7 @@ class UserAuthenticationTests {
     @MethodSource("validCredentials")
     @SneakyThrows
     void shouldRegisterUserWhenCredentialsAreValid(String scenario, String username, String password) {
-        var request = credentialsRequest("/api/users/v1/register", username, password);
+        var request = credentialsRequest("/api/v1/users/register", username, password);
 
         var result = mockMvc.perform(request).andReturn();
         var body = mapper.readTree(result.getResponse().getContentAsString());
@@ -126,7 +126,7 @@ class UserAuthenticationTests {
     void shouldAuthenticateUserWhenPasswordMatches(UserRole role) {
         var password = randomUUID().toString();
         var user = userRepository.saveAndFlush(new User("hotel_guest", passwordEncoder.encode(password), role));
-        var request = credentialsRequest("/api/users/v1/auth", user.getUsername(), password);
+        var request = credentialsRequest("/api/v1/users/auth", user.getUsername(), password);
 
         var result = mockMvc.perform(request).andReturn();
         var body = mapper.readValue(result.getResponse().getContentAsString(), TokenResponse.class);
@@ -146,14 +146,14 @@ class UserAuthenticationTests {
     @SneakyThrows
     void shouldAuthenticateRegisteredUserWhenRegistrationHasCompleted() {
         var password = randomUUID().toString();
-        mockMvc.perform(credentialsRequest("/api/users/v1/register", "hotel_guest", password))
+        mockMvc.perform(credentialsRequest("/api/v1/users/register", "hotel_guest", password))
             .andExpect(status().isCreated());
 
-        var result = mockMvc.perform(credentialsRequest("/api/users/v1/auth", "hotel_guest", password))
+        var result = mockMvc.perform(credentialsRequest("/api/v1/users/auth", "hotel_guest", password))
             .andExpect(status().isOk()).andReturn();
         var token = mapper.readTree(result.getResponse().getContentAsString()).get("accessToken").stringValue();
 
-        mockMvc.perform(get("/api/users/v1").header(AUTHORIZATION, "Bearer " + token))
+        mockMvc.perform(get("/api/v1/users").header(AUTHORIZATION, "Bearer " + token))
             .andExpect(status().isForbidden());
     }
 
@@ -163,8 +163,8 @@ class UserAuthenticationTests {
         var password = randomUUID().toString();
         userRepository.saveAndFlush(new User("hotel_guest", passwordEncoder.encode(password), USER));
 
-        var unknownUser = mockMvc.perform(credentialsRequest("/api/users/v1/auth", "unknown_guest", password));
-        var wrongPassword = mockMvc.perform(credentialsRequest("/api/users/v1/auth", "hotel_guest", randomUUID().toString()));
+        var unknownUser = mockMvc.perform(credentialsRequest("/api/v1/users/auth", "unknown_guest", password));
+        var wrongPassword = mockMvc.perform(credentialsRequest("/api/v1/users/auth", "hotel_guest", randomUUID().toString()));
 
         for (var response : List.of(unknownUser, wrongPassword)) {
             response.andExpect(status().isUnauthorized())
@@ -172,7 +172,7 @@ class UserAuthenticationTests {
                 .andExpect(content().contentTypeCompatibleWith(APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.code").value("INVALID_CREDENTIALS"))
                 .andExpect(jsonPath("$.detail").value("Invalid username or password"))
-                .andExpect(jsonPath("$.instance").value("/api/users/v1/auth"));
+                .andExpect(jsonPath("$.instance").value("/api/v1/users/auth"));
         }
     }
 
@@ -215,7 +215,7 @@ class UserAuthenticationTests {
     @SneakyThrows
     void shouldOmitRejectedValuesWhenPasswordValidationFails() {
         var rejectedPassword = randomUUID().toString().repeat(3);
-        var request = credentialsRequest("/api/users/v1/register", "hotel_guest", rejectedPassword);
+        var request = credentialsRequest("/api/v1/users/register", "hotel_guest", rejectedPassword);
 
         var result = mockMvc.perform(request).andReturn();
         var body = mapper.readTree(result.getResponse().getContentAsString());
@@ -233,7 +233,7 @@ class UserAuthenticationTests {
         var password = randomUUID().toString();
         var user = userRepository.saveAndFlush(new User("hotel_guest", passwordEncoder.encode(password), USER));
 
-        var result = mockMvc.perform(credentialsRequest("/api/users/v1/register", "hotel_guest", randomUUID().toString()));
+        var result = mockMvc.perform(credentialsRequest("/api/v1/users/register", "hotel_guest", randomUUID().toString()));
 
         result.andExpect(status().isConflict())
             .andExpect(jsonPath("$.code").value("USERNAME_ALREADY_EXISTS"));
@@ -248,7 +248,7 @@ class UserAuthenticationTests {
         var start = new CountDownLatch(1);
         Callable<Integer> registration = () -> {
             start.await();
-            return mockMvc.perform(credentialsRequest("/api/users/v1/register", "hotel_guest", password))
+            return mockMvc.perform(credentialsRequest("/api/v1/users/register", "hotel_guest", password))
                 .andReturn().getResponse().getStatus();
         };
 
@@ -295,7 +295,7 @@ class UserAuthenticationTests {
     }
 
     static Stream<Arguments> invalidCredentials() {
-        return Stream.of("/api/users/v1/register", "/api/users/v1/auth").flatMap(path -> Stream.of(
+        return Stream.of("/api/v1/users/register", "/api/v1/users/auth").flatMap(path -> Stream.of(
             arguments(path, "missing username", null, randomUUID().toString()),
             arguments(path, "short username", "ab", randomUUID().toString()),
             arguments(path, "long username", "a".repeat(65), randomUUID().toString()),
@@ -312,7 +312,7 @@ class UserAuthenticationTests {
     }
 
     static Stream<Arguments> unknownFields() {
-        return Stream.of("/api/users/v1/register", "/api/users/v1/auth")
+        return Stream.of("/api/v1/users/register", "/api/v1/users/auth")
             .flatMap(path -> Stream.of("role", "roles", "id", "userId", "passwordHash")
                 .map(field -> arguments(path, field)));
     }

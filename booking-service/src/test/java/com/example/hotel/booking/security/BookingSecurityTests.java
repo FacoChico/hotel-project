@@ -78,10 +78,8 @@ class BookingSecurityTests {
 
     @ParameterizedTest
     @CsvSource({
-        "USER, GET, /api/bookings/v1", "USER, POST, /api/bookings/v1",
-        "USER, GET, /api/bookings/v1/1", "USER, DELETE, /api/bookings/v1/1",
-        "ADMIN, GET, /api/users/v1", "ADMIN, POST, /api/users/v1",
-        "ADMIN, GET, /api/users/v1/1", "ADMIN, PATCH, /api/users/v1/1", "ADMIN, DELETE, /api/users/v1/1",
+        "USER, GET, /api/v1/bookings", "USER, POST, /api/v1/bookings",
+        "USER, GET, /api/v1/bookings/1", "USER, DELETE, /api/v1/bookings/1",
         "ADMIN, GET, /actuator/info"
     })
     @SneakyThrows
@@ -96,14 +94,14 @@ class BookingSecurityTests {
 
     @ParameterizedTest
     @CsvSource({
-        "USER, GET, /api/users/v1",
-        "USER, POST, /api/users/v1",
-        "USER, PATCH, /api/users/v1/1",
-        "USER, DELETE, /api/users/v1/1",
+        "USER, GET, /api/v1/users",
+        "USER, POST, /api/v1/users",
+        "USER, PATCH, /api/v1/users/1",
+        "USER, DELETE, /api/v1/users/1",
         "USER, GET, /actuator/info",
-        "ADMIN, GET, /api/bookings/v1",
-        "ADMIN, POST, /api/bookings/v1",
-        "ADMIN, DELETE, /api/bookings/v1/1"
+        "ADMIN, GET, /api/v1/bookings",
+        "ADMIN, POST, /api/v1/bookings",
+        "ADMIN, DELETE, /api/v1/bookings/1"
     })
     @SneakyThrows
     void shouldDenyRequestWhenRoleHasNoPermission(String role, String method, String path) {
@@ -119,7 +117,7 @@ class BookingSecurityTests {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"/api/users/v1", "/api/bookings/v1", "/actuator/info", "/api/users/v1/auth"})
+    @ValueSource(strings = {"/api/v1/users", "/api/v1/bookings", "/actuator/info", "/api/v1/users/auth"})
     @SneakyThrows
     void shouldReturnUnauthorizedWhenTokenIsMissing(String path) {
         var request = get(path);
@@ -134,7 +132,7 @@ class BookingSecurityTests {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"/api/users/v1/register", "/api/users/v1/auth"})
+    @ValueSource(strings = {"/api/v1/users/register", "/api/v1/users/auth"})
     @SneakyThrows
     void shouldRejectEmptyAuthenticationBodyWhenTokenIsMissing(String path) {
         var request = post(path);
@@ -149,7 +147,7 @@ class BookingSecurityTests {
     @MethodSource("invalidTokens")
     @SneakyThrows
     void shouldReturnUnauthorizedWhenTokenIsInvalid(String scenario, String token) {
-        var request = get("/api/bookings/v1").header(AUTHORIZATION, "Bearer " + token);
+        var request = get("/api/v1/bookings").header(AUTHORIZATION, "Bearer " + token);
 
         var response = mockMvc.perform(request);
 
@@ -166,7 +164,7 @@ class BookingSecurityTests {
         claims.put("scope", "ADMIN ROLE_ADMIN");
         var token = sign(claims, KEY_PAIR, RS256);
 
-        var response = mockMvc.perform(get("/api/users/v1").header(AUTHORIZATION, "Bearer " + token));
+        var response = mockMvc.perform(get("/api/v1/users").header(AUTHORIZATION, "Bearer " + token));
 
         response.andExpect(status().isForbidden());
     }
@@ -174,11 +172,16 @@ class BookingSecurityTests {
     @ParameterizedTest
     @CsvSource({
         "GET, /unlisted",
-        "PUT, /api/users/v1",
+        "PUT, /api/v1/users",
+        "POST, /api/users/v1/register",
+        "POST, /api/users/v1/auth",
+        "GET, /api/users/v1",
+        "POST, /api/users/v1",
+        "PATCH, /api/users/v1/1",
         "POST, /api/users/register",
         "POST, /api/users/auth",
-        "POST, /api/users/v2/register",
-        "PUT, /api/bookings/v1",
+        "POST, /api/v2/users/register",
+        "PUT, /api/v1/bookings",
         "POST, /actuator/health"
     })
     @SneakyThrows
@@ -195,10 +198,10 @@ class BookingSecurityTests {
     @SneakyThrows
     void shouldRequireBearerTokenWhenPreviousRequestWasAuthenticated() {
         var token = tokenService.issueToken(42, USER);
-        mockMvc.perform(get("/api/bookings/v1").header(AUTHORIZATION, "Bearer " + token))
+        mockMvc.perform(get("/api/v1/bookings").header(AUTHORIZATION, "Bearer " + token))
             .andExpect(status().isOk());
 
-        var response = mockMvc.perform(get("/api/bookings/v1"));
+        var response = mockMvc.perform(get("/api/v1/bookings"));
 
         response.andExpect(status().isUnauthorized());
     }
@@ -208,7 +211,7 @@ class BookingSecurityTests {
     void shouldAvoidSessionWhenBearerTokenIsAccepted() {
         var token = tokenService.issueToken(42, USER);
 
-        var result = mockMvc.perform(get("/api/bookings/v1").header(AUTHORIZATION, "Bearer " + token)).andReturn();
+        var result = mockMvc.perform(get("/api/v1/bookings").header(AUTHORIZATION, "Bearer " + token)).andReturn();
 
         assertThat(result.getResponse().getStatus()).isEqualTo(200);
         assertThat(result.getRequest().getSession(false)).isNull();
@@ -286,15 +289,10 @@ class BookingSecurityTests {
         @Bean
         RouterFunction<ServerResponse> securityTestRoutes() {
             return route()
-                .GET("/api/users/v1", request -> ok().body("admin"))
-                .POST("/api/users/v1", request -> ok().body("admin"))
-                .GET("/api/users/v1/{id}", request -> ok().body("admin"))
-                .PATCH("/api/users/v1/{id}", request -> ok().body("admin"))
-                .DELETE("/api/users/v1/{id}", request -> ok().body("admin"))
-                .GET("/api/bookings/v1", request -> ok().body("user"))
-                .POST("/api/bookings/v1", request -> ok().body("user"))
-                .GET("/api/bookings/v1/{id}", request -> ok().body("user"))
-                .DELETE("/api/bookings/v1/{id}", request -> ok().body("user"))
+                .GET("/api/v1/bookings", request -> ok().body("user"))
+                .POST("/api/v1/bookings", request -> ok().body("user"))
+                .GET("/api/v1/bookings/{id}", request -> ok().body("user"))
+                .DELETE("/api/v1/bookings/{id}", request -> ok().body("user"))
                 .build();
         }
     }

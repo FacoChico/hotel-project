@@ -38,4 +38,10 @@ public class User {
         this.passwordHash = passwordHash;
         this.role = role;
     }
+
+    public void updateDetails(String username, String passwordHash, UserRole role) {
+        this.username = username;
+        this.passwordHash = passwordHash;
+        this.role = role;
+    }
 }

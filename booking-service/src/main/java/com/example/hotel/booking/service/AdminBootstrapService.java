@@ -37,7 +37,7 @@ public class AdminBootstrapService {
         final var existingUser = userRepository.findByUsername(properties.username()).orElse(null);
         if (existingUser != null) {
             if (existingUser.getRole() != ADMIN) {
-                throw new IllegalStateException("Bootstrap administrator username is already assigned to a non-admin user");
+                throw new IllegalStateException("Bootstrap Admin username is already assigned to a non-admin user");
             }
             return;
         }

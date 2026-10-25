@@ -17,18 +17,18 @@ import lombok.RequiredArgsConstructor;
 import static org.springframework.http.HttpStatus.CREATED;
 
 @RestController
-@RequestMapping("/api/users")
+@RequestMapping("/api/v1/users")
 @RequiredArgsConstructor
 class UserAuthenticationController {
     private final UserAuthenticationService authenticationService;
 
-    @PostMapping("/v1/register")
+    @PostMapping("/register")
     @ResponseStatus(CREATED)
     RegisterResponse register(@Valid @RequestBody CredentialsRequest credentials) {
         return authenticationService.register(credentials);
     }
 
-    @PostMapping("/v1/auth")
+    @PostMapping("/auth")
     TokenResponse authenticate(@Valid @RequestBody CredentialsRequest credentials) {
         return authenticationService.authenticate(credentials);
     }
