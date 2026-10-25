@@ -1,4 +1,4 @@
-package com.example.hotel.booking.exception;
+package com.example.hotel.booking.controller.resolver;
 
 import com.example.hotel.booking.service.exception.EmptyUserUpdateException;
 import com.example.hotel.booking.service.exception.UserNotFoundException;

@@ -30,4 +30,9 @@ public class Hotel {
         this.name = name;
         this.address = address;
     }
+
+    public void updateDetails(String name, String address) {
+        this.name = name;
+        this.address = address;
+    }
 }
