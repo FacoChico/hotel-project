@@ -1,0 +1,123 @@
+package com.example.hotel.booking.service;
+
+import com.example.hotel.booking.controller.dto.BookingResponse;
+import com.example.hotel.booking.controller.dto.CreateBookingRequest;
+import com.example.hotel.booking.domain.Booking;
+import com.example.hotel.booking.gateway.HotelServiceGateway;
+import com.example.hotel.booking.gateway.exception.HotelServiceException;
+import com.example.hotel.booking.service.exception.BookingCreationException;
+import com.example.hotel.booking.service.exception.UserNotFoundException;
+
+import org.hibernate.exception.ConstraintViolationException;
+import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.stereotype.Service;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
+import static com.example.hotel.booking.domain.BookingStatus.CANCELLED;
+import static com.example.hotel.booking.domain.BookingStatus.CONFIRMED;
+import static java.util.Locale.ROOT;
+import static org.springframework.http.HttpStatus.CONFLICT;
+import static org.springframework.http.HttpStatus.GATEWAY_TIMEOUT;
+import static org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE;
+
+@Service
+@RequiredArgsConstructor
+@Slf4j
+public class BookingService {
+    private final BookingTransactions transactions;
+    private final HotelServiceGateway hotelServiceGateway;
+
+    public BookingCreationResult createBooking(long userId, CreateBookingRequest request) {
+        final var acceptance = accept(userId, request);
+        var booking = acceptance.booking();
+        if (!acceptance.created()) {
+            return new BookingCreationResult(toResponse(booking), false);
+        }
+
+        try {
+            hotelServiceGateway.confirm(booking, booking.getDeadlineAt());
+            booking = transactions.confirm(booking.getId());
+        } catch (HotelServiceException exception) {
+            throw compensate(booking, exception);
+        } catch (DataAccessException exception) {
+            booking = cancelAndRelease(booking);
+            throw storageFailure(booking, exception);
+        }
+
+        if (booking.getStatus() != CONFIRMED) {
+            final var isCancelled = booking.getStatus() == CANCELLED;
+            booking = cancelAndRelease(booking);
+            final var status = isCancelled
+                ? CONFLICT
+                : GATEWAY_TIMEOUT;
+            final var code = isCancelled
+                ? "BOOKING_CANCELLED"
+                : "BOOKING_TIMEOUT";
+            final var message = isCancelled
+                ? "Booking was cancelled during confirmation"
+                : "Booking waiting budget exhausted";
+            throw new BookingCreationException(status, code, message,
+                booking.getId(), booking.isReleasePending(), null);
+        }
+        return new BookingCreationResult(toResponse(booking), true);
+    }
+
+    private BookingTransactions.Acceptance accept(long userId, CreateBookingRequest request) {
+        try {
+            return transactions.accept(userId, request);
+        } catch (DataIntegrityViolationException exception) {
+            if (isConstraintViolation(exception, "uk_bookings_user_request")) {
+                return transactions.readAccepted(userId, request);
+            }
+            if (isConstraintViolation(exception, "fk_bookings_user")) {
+                throw new UserNotFoundException();
+            }
+            throw exception;
+        }
+    }
+
+    private static boolean isConstraintViolation(DataIntegrityViolationException exception, String name) {
+        return exception.getCause() instanceof ConstraintViolationException constraint
+            && constraint.getConstraintName() != null
+            && constraint.getConstraintName().toLowerCase(ROOT).contains(name);
+    }
+
+    private BookingCreationException compensate(Booking booking, HotelServiceException failure) {
+        final var cancelled = cancelAndRelease(booking);
+        return new BookingCreationException(failure.getStatus(), failure.getCode(), failure.getMessage(),
+            cancelled.getId(), cancelled.isReleasePending(), failure);
+    }
+
+    private Booking cancelAndRelease(Booking booking) {
+        try {
+            booking = transactions.cancelPending(booking.getId());
+            if (booking.isReleasePending()) {
+                try {
+                    hotelServiceGateway.release(booking, booking.getDeadlineAt());
+                    booking = transactions.completeRelease(booking.getId());
+                } catch (HotelServiceException exception) {
+                    log.warn("Booking release incomplete bookingId={} requestId={} roomId={} reason={} code={}",
+                        booking.getId(), booking.getRequestId(), booking.getRoomId(),
+                        booking.getReleaseReason(), exception.getCode());
+                }
+            }
+            return booking;
+        } catch (DataAccessException exception) {
+            throw storageFailure(booking, exception);
+        }
+    }
+
+    private static BookingCreationException storageFailure(Booking booking, DataAccessException cause) {
+        return new BookingCreationException(SERVICE_UNAVAILABLE, "BOOKING_STORAGE_UNAVAILABLE",
+            "Booking state could not be saved", booking.getId(), booking.isReleasePending(), cause);
+    }
+
+    private static BookingResponse toResponse(Booking booking) {
+        return new BookingResponse(booking.getId(), booking.getRequestId(), booking.getRoomId(),
+            booking.getStartDate(), booking.getEndDate(), booking.getStatus(),
+            booking.getCreatedAt(), booking.isReleasePending());
+    }
+}

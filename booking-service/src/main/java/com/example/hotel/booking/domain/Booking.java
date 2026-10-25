@@ -18,6 +18,9 @@ import jakarta.persistence.Version;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import static com.example.hotel.booking.domain.BookingReleaseReason.COMPENSATION;
+import static com.example.hotel.booking.domain.BookingStatus.CANCELLED;
+import static com.example.hotel.booking.domain.BookingStatus.CONFIRMED;
 import static com.example.hotel.booking.domain.BookingStatus.PENDING;
 import static jakarta.persistence.EnumType.STRING;
 import static jakarta.persistence.FetchType.LAZY;
@@ -90,5 +93,25 @@ public class Booking {
         this.status = PENDING;
         this.createdAt = createdAt;
         this.deadlineAt = deadlineAt;
+    }
+
+    public void confirm(Instant now) {
+        if (status == PENDING && deadlineAt.isAfter(now)) {
+            status = CONFIRMED;
+        }
+    }
+
+    public void cancelPending() {
+        if (status == PENDING) {
+            status = CANCELLED;
+            releasePending = true;
+            releaseReason = COMPENSATION;
+        }
+    }
+
+    public void completeRelease() {
+        if (status == CANCELLED) {
+            releasePending = false;
+        }
     }
 }

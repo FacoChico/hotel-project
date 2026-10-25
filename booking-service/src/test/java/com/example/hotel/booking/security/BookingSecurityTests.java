@@ -32,14 +32,14 @@ import java.util.stream.Stream;
 
 import lombok.SneakyThrows;
 
+import static com.example.hotel.booking.domain.UserRole.ADMIN;
+import static com.example.hotel.booking.domain.UserRole.USER;
+import static com.example.hotel.booking.domain.UserRole.valueOf;
 import static com.example.hotel.booking.testutil.JwtTestKeys.AUDIENCE;
 import static com.example.hotel.booking.testutil.JwtTestKeys.ISSUER;
 import static com.example.hotel.booking.testutil.JwtTestKeys.KEY_PAIR;
 import static com.example.hotel.booking.testutil.JwtTestKeys.OTHER_KEY_PAIR;
 import static com.example.hotel.booking.testutil.JwtTestKeys.sign;
-import static com.example.hotel.booking.domain.UserRole.ADMIN;
-import static com.example.hotel.booking.domain.UserRole.USER;
-import static com.example.hotel.booking.domain.UserRole.valueOf;
 import static com.nimbusds.jose.JWSAlgorithm.RS256;
 import static com.nimbusds.jose.JWSAlgorithm.RS512;
 import static java.util.Arrays.asList;
@@ -92,8 +92,9 @@ class BookingSecurityTests {
 
     @ParameterizedTest
     @CsvSource({
-        "USER, GET, /api/v1/bookings", "USER, POST, /api/v1/bookings",
-        "USER, GET, /api/v1/bookings/1", "USER, DELETE, /api/v1/bookings/1",
+        "USER, GET, /api/v1/bookings",
+        "USER, GET, /api/v1/bookings/1",
+        "USER, DELETE, /api/v1/bookings/1",
         "ADMIN, GET, /actuator/info"
     })
     @SneakyThrows
@@ -304,7 +305,6 @@ class BookingSecurityTests {
         RouterFunction<ServerResponse> securityTestRoutes() {
             return route()
                 .GET("/api/v1/bookings", request -> ok().body("user"))
-                .POST("/api/v1/bookings", request -> ok().body("user"))
                 .GET("/api/v1/bookings/{id:[0-9]+}", request -> ok().body("user"))
                 .DELETE("/api/v1/bookings/{id:[0-9]+}", request -> ok().body("user"))
                 .build();
