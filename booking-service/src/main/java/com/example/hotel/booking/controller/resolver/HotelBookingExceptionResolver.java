@@ -1,6 +1,7 @@
 package com.example.hotel.booking.controller.resolver;
 
 import com.example.hotel.booking.service.exception.EmptyUserUpdateException;
+import com.example.hotel.booking.service.exception.UserHasBookingsException;
 import com.example.hotel.booking.service.exception.UserNotFoundException;
 import com.example.hotel.booking.service.exception.UsernameAlreadyExistsException;
 
@@ -35,6 +36,12 @@ class HotelBookingExceptionResolver extends ResponseEntityExceptionHandler {
     private static ResponseEntity<ProblemDetail> handleUsernameConflict(UsernameAlreadyExistsException exception) {
         return ResponseEntity.status(CONFLICT)
             .body(getProblemDetails(CONFLICT, "USERNAME_ALREADY_EXISTS", exception.getMessage()));
+    }
+
+    @ExceptionHandler(UserHasBookingsException.class)
+    private static ResponseEntity<ProblemDetail> handleUserBookingHistory(UserHasBookingsException exception) {
+        return ResponseEntity.status(CONFLICT)
+            .body(getProblemDetails(CONFLICT, "USER_HAS_BOOKINGS", exception.getMessage()));
     }
 
     @ExceptionHandler(BadCredentialsException.class)
