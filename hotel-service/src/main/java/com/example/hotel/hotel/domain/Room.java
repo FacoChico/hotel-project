@@ -46,6 +46,14 @@ public class Room {
         this.available = available;
     }
 
+    public void incrementTimesBooked() {
+        timesBooked++;
+    }
+
+    public void decrementTimesBooked() {
+        timesBooked--;
+    }
+
     public void updateDetails(String number, boolean available) {
         this.number = number;
         this.available = available;

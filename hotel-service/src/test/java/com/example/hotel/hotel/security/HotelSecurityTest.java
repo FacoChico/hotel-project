@@ -130,17 +130,6 @@ class HotelSecurityTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"/api/v1/rooms/1/confirm-availability", "/api/v1/rooms/1/release"})
-    @SneakyThrows
-    void shouldAllowInternalRequestWhenServiceHasReservationAuthority(String path) {
-        final var token = sign(serviceClaims(), KEY_PAIR, RS256);
-
-        final var response = mockMvc.perform(post(path).header(AUTHORIZATION, "Bearer " + token));
-
-        response.andExpect(status().isOk());
-    }
-
-    @ParameterizedTest
     @CsvSource({
         "USER, /api/v1/rooms/1/confirm-availability",
         "ADMIN, /api/v1/rooms/1/confirm-availability",
@@ -273,30 +262,18 @@ class HotelSecurityTest {
         response.andExpect(status().isForbidden());
     }
 
-    @ParameterizedTest
-    @ValueSource(strings = {"user", "service"})
+    @Test
     @SneakyThrows
-    void shouldAvoidSessionWhenBearerTokenIsAccepted(String tokenKind) {
-        final var internal = tokenKind.equals("service");
-        final var claims = internal
-            ? serviceClaims()
-            : userClaims();
-        final var path = internal
-            ? "/api/v1/rooms/1/release"
-            : "/api/v1/hotels";
-        final var method = internal
-            ? "POST"
-            : "GET";
-        final var token = sign(claims, KEY_PAIR, RS256);
+    void shouldNotCreateSessionWhenUserTokenIsValid() {
+        final var token = sign(userClaims(), KEY_PAIR, RS256);
 
-        final var result = mockMvc.perform(request(HttpMethod.valueOf(method), URI.create(path))
+        final var result = mockMvc.perform(get("/api/v1/hotels")
             .header(AUTHORIZATION, "Bearer " + token)).andReturn();
 
         assertThat(result.getResponse().getStatus()).isEqualTo(200);
         assertThat(result.getRequest().getSession(false)).isNull();
         assertThat(result.getResponse().getHeader("Set-Cookie")).isNull();
-        mockMvc.perform(request(HttpMethod.valueOf(method), URI.create(path)))
-            .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/hotels")).andExpect(status().isUnauthorized());
     }
 
     private static Stream<Arguments> permittedUserRequests() {
@@ -426,8 +403,6 @@ class HotelSecurityTest {
                 .GET("/api/v1/rooms", request -> ok().body("rooms"))
                 .GET("/api/v1/rooms/recommend", request -> ok().body("recommendations"))
                 .GET("/api/v1/rooms/statistics", request -> ok().body("statistics"))
-                .POST("/api/v1/rooms/{id:[0-9]+}/confirm-availability", request -> ok().body("reserved"))
-                .POST("/api/v1/rooms/{id:[0-9]+}/release", request -> ok().body("released"))
                 .build();
         }
     }

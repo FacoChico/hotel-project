@@ -16,6 +16,7 @@ import jakarta.persistence.UniqueConstraint;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import static com.example.hotel.hotel.domain.RoomReservationState.RELEASED;
 import static jakarta.persistence.EnumType.STRING;
 import static jakarta.persistence.FetchType.LAZY;
 import static jakarta.persistence.GenerationType.IDENTITY;
@@ -61,5 +62,9 @@ public class RoomReservation {
         this.startDate = startDate;
         this.endDate = endDate;
         this.state = state;
+    }
+
+    public void release() {
+        state = RELEASED;
     }
 }

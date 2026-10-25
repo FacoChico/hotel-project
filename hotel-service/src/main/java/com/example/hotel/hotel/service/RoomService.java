@@ -6,8 +6,11 @@ import com.example.hotel.hotel.controller.dto.UpdateRoomRequest;
 import com.example.hotel.hotel.domain.Room;
 import com.example.hotel.hotel.repository.HotelRepository;
 import com.example.hotel.hotel.repository.RoomRepository;
+import com.example.hotel.hotel.repository.RoomReservationRepository;
 import com.example.hotel.hotel.service.exception.EmptyRoomUpdateException;
 import com.example.hotel.hotel.service.exception.HotelNotFoundException;
+import com.example.hotel.hotel.service.exception.RoomHasFutureReservationsException;
+import com.example.hotel.hotel.service.exception.RoomHasReservationsException;
 import com.example.hotel.hotel.service.exception.RoomNotFoundException;
 import com.example.hotel.hotel.service.exception.RoomNumberAlreadyExistsException;
 
@@ -16,8 +19,12 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.LocalDate;
+
 import lombok.RequiredArgsConstructor;
 
+import static com.example.hotel.hotel.domain.RoomReservationState.RESERVED;
 import static java.util.Locale.ROOT;
 
 @Service
@@ -25,6 +32,8 @@ import static java.util.Locale.ROOT;
 public class RoomService {
     private final RoomRepository roomRepository;
     private final HotelRepository hotelRepository;
+    private final RoomReservationRepository reservationRepository;
+    private final Clock clock;
 
     @Transactional
     public RoomResponse createRoom(CreateRoomRequest request) {
@@ -51,13 +60,16 @@ public class RoomService {
             throw new EmptyRoomUpdateException();
         }
 
-        final var room = findRoom(id);
+        final var room = findRoomForUpdate(id);
         final var number = request.getNumber() == null
             ? room.getNumber()
             : request.getNumber();
         final var available = request.getAvailable() == null
             ? room.isAvailable()
             : request.getAvailable();
+        if (!available && reservationExists(id)) {
+            throw new RoomHasFutureReservationsException();
+        }
         room.updateDetails(number, available);
 
         try {
@@ -70,11 +82,24 @@ public class RoomService {
 
     @Transactional
     public void deleteRoom(long id) {
-        roomRepository.delete(findRoom(id));
+        final var room = findRoomForUpdate(id);
+        if (reservationRepository.existsByRoomId(id)) {
+            throw new RoomHasReservationsException();
+        }
+        roomRepository.delete(room);
     }
 
     private Room findRoom(long id) {
         return roomRepository.findById(id)
+            .orElseThrow(RoomNotFoundException::new);
+    }
+
+    private boolean reservationExists(long id) {
+        return reservationRepository.existsByRoomIdAndStateAndEndDateGreaterThan(id, RESERVED, LocalDate.now(clock));
+    }
+
+    private Room findRoomForUpdate(long id) {
+        return roomRepository.findByIdForUpdate(id)
             .orElseThrow(RoomNotFoundException::new);
     }
 

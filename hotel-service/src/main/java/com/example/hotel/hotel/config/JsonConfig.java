@@ -11,6 +11,7 @@ import static tools.jackson.databind.cfg.CoercionAction.Fail;
 import static tools.jackson.databind.cfg.CoercionInputShape.Boolean;
 import static tools.jackson.databind.cfg.CoercionInputShape.Float;
 import static tools.jackson.databind.cfg.CoercionInputShape.Integer;
+import static tools.jackson.databind.cfg.EnumFeature.FAIL_ON_NUMBERS_FOR_ENUMS;
 
 @Configuration(proxyBeanMethods = false)
 class JsonConfig {
@@ -38,6 +39,6 @@ class JsonConfig {
                     .setCoercion(Float, Fail)
                     .setCoercion(CoercionInputShape.String, Fail)
                     .setCoercion(CoercionInputShape.EmptyString, Fail)
-            );
+            ).enable(FAIL_ON_NUMBERS_FOR_ENUMS);
     }
 }
