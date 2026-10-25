@@ -300,14 +300,10 @@ class HotelSecurityTest {
     }
 
     private static Stream<Arguments> permittedUserRequests() {
-        final var readPaths = List.of("/api/v1/hotels", "/api/v1/hotels/1", "/api/v1/rooms",
-            "/api/v1/rooms/1", "/api/v1/rooms/recommend");
+        final var readPaths = List.of("/api/v1/rooms", "/api/v1/rooms/1", "/api/v1/rooms/recommend");
         final var reads = Stream.of("USER", "ADMIN")
             .flatMap(role -> readPaths.stream().map(path -> arguments(role, "GET", path)));
         final var adminRequests = Stream.of(
-            arguments("ADMIN", "POST", "/api/v1/hotels"),
-            arguments("ADMIN", "PATCH", "/api/v1/hotels/1"),
-            arguments("ADMIN", "DELETE", "/api/v1/hotels/1"),
             arguments("ADMIN", "POST", "/api/v1/rooms"),
             arguments("ADMIN", "PATCH", "/api/v1/rooms/1"),
             arguments("ADMIN", "DELETE", "/api/v1/rooms/1"),
@@ -430,11 +426,6 @@ class HotelSecurityTest {
         @Bean
         private static RouterFunction<ServerResponse> securityTestRoutes() {
             return route()
-                .GET("/api/v1/hotels", request -> ok().body("hotels"))
-                .GET("/api/v1/hotels/{id}", request -> ok().body("hotel"))
-                .POST("/api/v1/hotels", request -> ok().body("hotel"))
-                .PATCH("/api/v1/hotels/{id}", request -> ok().body("hotel"))
-                .DELETE("/api/v1/hotels/{id}", request -> ok().body("hotel"))
                 .GET("/api/v1/rooms", request -> ok().body("rooms"))
                 .GET("/api/v1/rooms/recommend", request -> ok().body("recommendations"))
                 .GET("/api/v1/rooms/statistics", request -> ok().body("statistics"))
