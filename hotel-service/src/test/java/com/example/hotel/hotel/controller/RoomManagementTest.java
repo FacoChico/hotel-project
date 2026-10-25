@@ -452,24 +452,12 @@ class RoomManagementTest {
             .andExpect(jsonPath("$.code").value(code));
     }
 
-    @ParameterizedTest
-    @ValueSource(strings = {"/api/v1/rooms/recommend", "/api/v1/rooms/statistics"})
-    @SneakyThrows
-    void shouldReturnNotFoundWhenSearchOperationIsNotImplemented(String path) {
-        final var result = mockMvc.perform(authenticatedRequest(GET, path, "ADMIN", null));
-
-        result.andExpect(status().isNotFound());
-    }
-
     @Test
     @SneakyThrows
-    void shouldReturnMethodNotAllowedWhenRoomSearchIsNotImplemented() {
-        final var roomRequest = authenticatedRequest(GET, "/api/v1/rooms", "ADMIN", null);
+    void shouldReturnNotFoundWhenStatisticsIsNotImplemented() {
+        final var result = mockMvc.perform(authenticatedRequest(GET, "/api/v1/rooms/statistics", "ADMIN", null));
 
-        final var result = mockMvc.perform(roomRequest);
-
-        result.andExpect(status().isMethodNotAllowed())
-            .andExpect(jsonPath("$.code").value("METHOD_NOT_ALLOWED"));
+        result.andExpect(status().isNotFound());
     }
 
     @Test

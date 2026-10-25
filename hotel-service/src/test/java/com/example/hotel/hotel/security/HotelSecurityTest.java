@@ -277,13 +277,9 @@ class HotelSecurityTest {
     }
 
     private static Stream<Arguments> permittedUserRequests() {
-        final var readPaths = List.of("/api/v1/rooms", "/api/v1/rooms/recommend");
-        final var reads = Stream.of("USER", "ADMIN")
-            .flatMap(role -> readPaths.stream().map(path -> arguments(role, "GET", path)));
-        final var adminRequests = Stream.of(
+        return Stream.of(
             arguments("ADMIN", "GET", "/api/v1/rooms/statistics"),
             arguments("ADMIN", "GET", "/actuator/info"));
-        return Stream.concat(reads, adminRequests);
     }
 
     private static Stream<Arguments> invalidUserTokens() {
@@ -400,8 +396,6 @@ class HotelSecurityTest {
         @Bean
         private static RouterFunction<ServerResponse> securityTestRoutes() {
             return route()
-                .GET("/api/v1/rooms", request -> ok().body("rooms"))
-                .GET("/api/v1/rooms/recommend", request -> ok().body("recommendations"))
                 .GET("/api/v1/rooms/statistics", request -> ok().body("statistics"))
                 .build();
         }
