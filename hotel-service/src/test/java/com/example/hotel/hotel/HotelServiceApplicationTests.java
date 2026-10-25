@@ -1,14 +1,18 @@
 package com.example.hotel.hotel;
 
-import java.net.URI;
+import com.example.hotel.hotel.testutil.JwtTestKeys;
 
-import javax.sql.DataSource;
-
-import lombok.SneakyThrows;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+
+import java.net.URI;
+
+import javax.sql.DataSource;
+import lombok.SneakyThrows;
 
 import static java.net.http.HttpClient.newHttpClient;
 import static java.net.http.HttpRequest.newBuilder;
@@ -26,6 +30,11 @@ class HotelServiceApplicationTests {
 
     @Autowired
     private DataSource dataSource;
+
+    @DynamicPropertySource
+    static void registerJwtProperties(DynamicPropertyRegistry registry) {
+        JwtTestKeys.registerProperties(registry);
+    }
 
     @Test
     @SneakyThrows
