@@ -61,6 +61,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest(properties = {
     "eureka.client.enabled=false",
+    "security.bootstrap-admin.enabled=false",
     "spring.datasource.url=jdbc:h2:mem:authentication_tests;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE"
 })
 @AutoConfigureMockMvc(print = NONE)
