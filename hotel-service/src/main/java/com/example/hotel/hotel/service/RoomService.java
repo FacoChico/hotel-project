@@ -1,6 +1,7 @@
 package com.example.hotel.hotel.service;
 
 import com.example.hotel.hotel.controller.dto.CreateRoomRequest;
+import com.example.hotel.hotel.controller.dto.RoomPageResponse;
 import com.example.hotel.hotel.controller.dto.RoomResponse;
 import com.example.hotel.hotel.controller.dto.UpdateRoomRequest;
 import com.example.hotel.hotel.domain.Room;
@@ -9,6 +10,7 @@ import com.example.hotel.hotel.repository.RoomRepository;
 import com.example.hotel.hotel.repository.RoomReservationRepository;
 import com.example.hotel.hotel.service.exception.EmptyRoomUpdateException;
 import com.example.hotel.hotel.service.exception.HotelNotFoundException;
+import com.example.hotel.hotel.service.exception.InvalidReservationDatesException;
 import com.example.hotel.hotel.service.exception.RoomHasFutureReservationsException;
 import com.example.hotel.hotel.service.exception.RoomHasReservationsException;
 import com.example.hotel.hotel.service.exception.RoomNotFoundException;
@@ -16,15 +18,20 @@ import com.example.hotel.hotel.service.exception.RoomNumberAlreadyExistsExceptio
 
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.LocalDate;
+import java.util.List;
 
 import lombok.RequiredArgsConstructor;
 
 import static com.example.hotel.hotel.domain.RoomReservationState.RESERVED;
+import static com.example.hotel.hotel.repository.RoomSpecifications.availableForDates;
 import static java.util.Locale.ROOT;
 
 @Service
@@ -47,6 +54,24 @@ public class RoomService {
             throw evaluatePersistenceException(exception);
         }
         return toResponse(room);
+    }
+
+    @Transactional(readOnly = true)
+    public RoomPageResponse listAvailableRooms(LocalDate startDate,
+                                               LocalDate endDate,
+                                               Long hotelId,
+                                               int page,
+                                               int size) {
+        return findAvailableRooms(startDate, endDate, hotelId, PageRequest.of(page, size, Sort.by("id")));
+    }
+
+    @Transactional(readOnly = true)
+    public RoomPageResponse recommendAvailableRooms(LocalDate startDate,
+                                                    LocalDate endDate,
+                                                    Long hotelId,
+                                                    int page,
+                                                    int size) {
+        return findAvailableRooms(startDate, endDate, hotelId, PageRequest.of(page, size, Sort.by("timesBooked", "id")));
     }
 
     @Transactional(readOnly = true)
@@ -87,6 +112,24 @@ public class RoomService {
             throw new RoomHasReservationsException();
         }
         roomRepository.delete(room);
+    }
+
+    private RoomPageResponse findAvailableRooms(LocalDate startDate, LocalDate endDate, Long hotelId, Pageable pageable) {
+        if (!startDate.isBefore(endDate)) {
+            throw new InvalidReservationDatesException();
+        }
+
+        final var specification = availableForDates(startDate, endDate, hotelId);
+        final var totalElements = roomRepository.count(specification);
+        if (pageable.getOffset() >= totalElements) {
+            return new RoomPageResponse(List.of(), pageable.getPageNumber(), pageable.getPageSize(), totalElements);
+        }
+
+        final var rooms = roomRepository.findBy(specification, query -> query.slice(pageable))
+            .getContent().stream()
+            .map(RoomService::toResponse)
+            .toList();
+        return new RoomPageResponse(rooms, pageable.getPageNumber(), pageable.getPageSize(), totalElements);
     }
 
     private Room findRoom(long id) {

@@ -22,6 +22,7 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -143,6 +144,15 @@ class HotelServiceExceptionResolver extends ResponseEntityExceptionHandler {
         problem.setProperty("violations", violations);
 
         return ResponseEntity.badRequest().body(problem);
+    }
+
+    @Override
+    protected @NonNull ResponseEntity<Object> handleMissingServletRequestParameter(@NonNull MissingServletRequestParameterException exception,
+                                                                                   @NonNull HttpHeaders headers,
+                                                                                   @NonNull HttpStatusCode status,
+                                                                                   @NonNull WebRequest request) {
+        return ResponseEntity.badRequest()
+            .body(getProblemDetails(BAD_REQUEST, "INVALID_REQUEST_PARAMETERS", "Required request parameter is missing"));
     }
 
     @Override
