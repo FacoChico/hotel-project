@@ -23,7 +23,10 @@ import static org.springframework.boot.test.context.SpringBootTest.WebEnvironmen
 
 @SpringBootTest(
     webEnvironment = RANDOM_PORT,
-    properties = "eureka.client.enabled=false"
+    properties = {
+        "eureka.client.enabled=false",
+        "security.bootstrap-admin.enabled=false"
+    }
 )
 class BookingServiceApplicationTests {
     @LocalServerPort

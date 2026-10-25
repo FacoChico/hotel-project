@@ -44,6 +44,11 @@ info:
     name: ${spring.application.name}
 
 security:
+  bootstrap-admin:
+    # bootstrap admin is needed until h2 is used or there is no admin in the db
+    enabled: ${BOOTSTRAP_ADMIN_ENABLED:true}
+    username: ${BOOTSTRAP_ADMIN_USERNAME:}
+    password: ${BOOTSTRAP_ADMIN_PASSWORD:}
   jwt:
     issuer: ${JWT_ISSUER:hotel-booking}
     audience: ${JWT_AUDIENCE:hotel-api}

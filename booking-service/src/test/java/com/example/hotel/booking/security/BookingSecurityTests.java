@@ -59,7 +59,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.web.servlet.function.RouterFunctions.route;
 import static org.springframework.web.servlet.function.ServerResponse.ok;
 
-@SpringBootTest(properties = "eureka.client.enabled=false")
+@SpringBootTest(properties = {
+    "eureka.client.enabled=false",
+    "security.bootstrap-admin.enabled=false"
+})
 @AutoConfigureMockMvc(print = NONE)
 @Import(BookingSecurityTests.TestRoutesConfig.class)
 class BookingSecurityTests {
