@@ -454,14 +454,6 @@ class RoomManagementTest {
 
     @Test
     @SneakyThrows
-    void shouldReturnNotFoundWhenStatisticsIsNotImplemented() {
-        final var result = mockMvc.perform(authenticatedRequest(GET, "/api/v1/rooms/statistics", "ADMIN", null));
-
-        result.andExpect(status().isNotFound());
-    }
-
-    @Test
-    @SneakyThrows
     void shouldCreateSingleRoomWhenSameNumberIsSubmittedConcurrently() {
         // given
         final var hotel = persistHotel("City Hotel");

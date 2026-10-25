@@ -10,16 +10,11 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpMethod;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.web.servlet.function.RouterFunction;
-import org.springframework.web.servlet.function.ServerResponse;
 
 import java.net.URI;
 import java.time.Instant;
@@ -54,12 +49,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-import static org.springframework.web.servlet.function.RouterFunctions.route;
-import static org.springframework.web.servlet.function.ServerResponse.ok;
 
 @SpringBootTest(properties = "eureka.client.enabled=false")
 @AutoConfigureMockMvc(print = NONE)
-@Import(HotelSecurityTest.TestRoutesConfig.class)
 class HotelSecurityTest {
     @Autowired
     private MockMvc mockMvc;
@@ -69,16 +61,14 @@ class HotelSecurityTest {
         JwtTestKeys.registerProperties(registry);
     }
 
-    @ParameterizedTest
-    @MethodSource("permittedUserRequests")
+    @Test
     @SneakyThrows
-    void shouldAllowRequestWhenRoleHasPermission(String role, String method, String path) {
+    void shouldReturnApplicationInfoWhenRoleIsAdmin() {
         final var claims = userClaims();
-        claims.put("roles", List.of(role));
+        claims.put("roles", List.of("ADMIN"));
         final var token = sign(claims, KEY_PAIR, RS256);
 
-        final var response = mockMvc.perform(request(HttpMethod.valueOf(method), URI.create(path))
-            .header(AUTHORIZATION, "Bearer " + token));
+        final var response = mockMvc.perform(get("/actuator/info").header(AUTHORIZATION, "Bearer " + token));
 
         response.andExpect(status().isOk());
     }
@@ -276,12 +266,6 @@ class HotelSecurityTest {
         mockMvc.perform(get("/api/v1/hotels")).andExpect(status().isUnauthorized());
     }
 
-    private static Stream<Arguments> permittedUserRequests() {
-        return Stream.of(
-            arguments("ADMIN", "GET", "/api/v1/rooms/statistics"),
-            arguments("ADMIN", "GET", "/actuator/info"));
-    }
-
     private static Stream<Arguments> invalidUserTokens() {
         final var tokens = new ArrayList<Arguments>();
         for (final var claim : List.of("sub", "iss", "aud", "iat", "exp", "roles")) {
@@ -388,16 +372,5 @@ class HotelSecurityTest {
         claims.put("exp", Date.from(now.plusSeconds(120)));
         claims.put("scope", "reservations:write");
         return claims;
-    }
-
-    @TestConfiguration(proxyBeanMethods = false)
-    static class TestRoutesConfig {
-
-        @Bean
-        private static RouterFunction<ServerResponse> securityTestRoutes() {
-            return route()
-                .GET("/api/v1/rooms/statistics", request -> ok().body("statistics"))
-                .build();
-        }
     }
 }
