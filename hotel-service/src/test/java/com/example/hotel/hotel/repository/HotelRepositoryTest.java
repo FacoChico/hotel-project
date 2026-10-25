@@ -34,7 +34,7 @@ class HotelRepositoryTest {
     private JdbcTemplate jdbcTemplate;
 
     @Test
-    void shouldHaveHotelAndRoomSchemaWhenMigrationsAreApplied() {
+    void shouldApplyAllMigrationsWhenSchemaIsInitialized() {
         final var migrationInfo = flyway.info();
 
         final var appliedMigrations = migrationInfo.applied();
@@ -42,7 +42,7 @@ class HotelRepositoryTest {
 
         assertThat(appliedMigrations)
             .extracting(MigrationInfo::getScript)
-            .containsExactly("V1__create_hotels_and_rooms.sql");
+            .containsExactly("V1__create_hotels_and_rooms.sql", "V2__create_room_reservations.sql");
         assertThat(pendingMigrations).isEmpty();
     }
 
