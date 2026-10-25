@@ -84,7 +84,7 @@ class AdminBootstrapServiceTests {
         final var user = userRepository.findByUsername("hotel_admin").orElseThrow();
         final var payload = mapper.writeValueAsBytes(Map.of("username", "hotel_admin", "password", BOOTSTRAP_PASSWORD));
 
-        final var result = mockMvc.perform(post("/api/users/v1/auth").contentType(APPLICATION_JSON).content(payload))
+        final var result = mockMvc.perform(post("/api/v1/users/auth").contentType(APPLICATION_JSON).content(payload))
             .andExpect(status().isOk())
             .andReturn();
         final var accessToken = mapper.readTree(result.getResponse().getContentAsString()).get("accessToken").stringValue();
