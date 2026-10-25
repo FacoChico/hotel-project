@@ -3,9 +3,12 @@ package com.example.hotel.hotel.service;
 import com.example.hotel.hotel.controller.dto.CreateRoomRequest;
 import com.example.hotel.hotel.controller.dto.RoomPageResponse;
 import com.example.hotel.hotel.controller.dto.RoomResponse;
+import com.example.hotel.hotel.controller.dto.RoomStatisticsPageResponse;
+import com.example.hotel.hotel.controller.dto.RoomStatisticsResponse;
 import com.example.hotel.hotel.controller.dto.UpdateRoomRequest;
 import com.example.hotel.hotel.domain.Room;
 import com.example.hotel.hotel.repository.HotelRepository;
+import com.example.hotel.hotel.repository.RoomOccupancyProjection;
 import com.example.hotel.hotel.repository.RoomRepository;
 import com.example.hotel.hotel.repository.RoomReservationRepository;
 import com.example.hotel.hotel.service.exception.EmptyRoomUpdateException;
@@ -32,6 +35,7 @@ import lombok.RequiredArgsConstructor;
 
 import static com.example.hotel.hotel.domain.RoomReservationState.RESERVED;
 import static com.example.hotel.hotel.repository.RoomSpecifications.availableForDates;
+import static java.time.temporal.ChronoUnit.DAYS;
 import static java.util.Locale.ROOT;
 
 @Service
@@ -72,6 +76,32 @@ public class RoomService {
                                                     int page,
                                                     int size) {
         return findAvailableRooms(startDate, endDate, hotelId, PageRequest.of(page, size, Sort.by("timesBooked", "id")));
+    }
+
+    @Transactional(readOnly = true)
+    public RoomStatisticsPageResponse getOccupancyStatistics(LocalDate startDate,
+                                                             LocalDate endDate,
+                                                             Long hotelId,
+                                                             int page,
+                                                             int size) {
+        if (!startDate.isBefore(endDate)) {
+            throw new InvalidReservationDatesException();
+        }
+
+        final var totalElements = hotelId == null
+            ? roomRepository.count()
+            : roomRepository.countByHotelId(hotelId);
+        final var pageable = PageRequest.of(page, size);
+        if (pageable.getOffset() >= totalElements) {
+            return new RoomStatisticsPageResponse(List.of(), page, size, totalElements);
+        }
+
+        final var totalNights = DAYS.between(startDate, endDate); // totalNights is always >= 1
+        final var statistics = roomRepository.findOccupancyStatistics(startDate, endDate, hotelId, RESERVED.name(), pageable)
+            .stream()
+            .map(occupancy -> toStatisticsResponse(occupancy, totalNights))
+            .toList();
+        return new RoomStatisticsPageResponse(statistics, page, size, totalElements);
     }
 
     @Transactional(readOnly = true)
@@ -158,6 +188,17 @@ public class RoomService {
             }
         }
         return exception;
+    }
+
+    private static RoomStatisticsResponse toStatisticsResponse(RoomOccupancyProjection occupancy, long totalNights) {
+        final var bookedNights = occupancy.getBookedNights();
+        return new RoomStatisticsResponse(
+            occupancy.getRoomId(),
+            occupancy.getTimesBooked(),
+            bookedNights,
+            totalNights,
+            (double) bookedNights / totalNights
+        );
     }
 
     private static RoomResponse toResponse(Room room) {
