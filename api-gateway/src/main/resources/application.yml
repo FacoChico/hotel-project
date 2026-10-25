@@ -18,7 +18,7 @@ spring:
             - id: hotel-item
               uri: lb://hotel-service
               predicates:
-                - Path=/api/v1/hotels/{id}
+                - Path=/api/v1/hotels/{id:[0-9]+}
                 - Method=GET,PATCH,DELETE
             - id: rooms-collection
               uri: lb://hotel-service
@@ -28,7 +28,7 @@ spring:
             - id: room-item
               uri: lb://hotel-service
               predicates:
-                - Path=/api/v1/rooms/{id}
+                - Path=/api/v1/rooms/{id:[0-9]+}
                 - Method=GET,PATCH,DELETE
             - id: room-recommendations-and-statistics
               uri: lb://hotel-service
@@ -43,7 +43,7 @@ spring:
             - id: user-item
               uri: lb://booking-service
               predicates:
-                - Path=/api/v1/users/{id}
+                - Path=/api/v1/users/{id:[0-9]+}
                 - Method=GET,PATCH,DELETE
             - id: user-authentication
               uri: lb://booking-service
@@ -58,7 +58,7 @@ spring:
             - id: booking-item
               uri: lb://booking-service
               predicates:
-                - Path=/api/v1/bookings/{id}
+                - Path=/api/v1/bookings/{id:[0-9]+}
                 - Method=GET,DELETE
 
 eureka:

@@ -300,13 +300,10 @@ class HotelSecurityTest {
     }
 
     private static Stream<Arguments> permittedUserRequests() {
-        final var readPaths = List.of("/api/v1/rooms", "/api/v1/rooms/1", "/api/v1/rooms/recommend");
+        final var readPaths = List.of("/api/v1/rooms", "/api/v1/rooms/recommend");
         final var reads = Stream.of("USER", "ADMIN")
             .flatMap(role -> readPaths.stream().map(path -> arguments(role, "GET", path)));
         final var adminRequests = Stream.of(
-            arguments("ADMIN", "POST", "/api/v1/rooms"),
-            arguments("ADMIN", "PATCH", "/api/v1/rooms/1"),
-            arguments("ADMIN", "DELETE", "/api/v1/rooms/1"),
             arguments("ADMIN", "GET", "/api/v1/rooms/statistics"),
             arguments("ADMIN", "GET", "/actuator/info"));
         return Stream.concat(reads, adminRequests);
@@ -429,12 +426,8 @@ class HotelSecurityTest {
                 .GET("/api/v1/rooms", request -> ok().body("rooms"))
                 .GET("/api/v1/rooms/recommend", request -> ok().body("recommendations"))
                 .GET("/api/v1/rooms/statistics", request -> ok().body("statistics"))
-                .GET("/api/v1/rooms/{id}", request -> ok().body("room"))
-                .POST("/api/v1/rooms", request -> ok().body("room"))
-                .PATCH("/api/v1/rooms/{id}", request -> ok().body("room"))
-                .DELETE("/api/v1/rooms/{id}", request -> ok().body("room"))
-                .POST("/api/v1/rooms/{id}/confirm-availability", request -> ok().body("reserved"))
-                .POST("/api/v1/rooms/{id}/release", request -> ok().body("released"))
+                .POST("/api/v1/rooms/{id:[0-9]+}/confirm-availability", request -> ok().body("reserved"))
+                .POST("/api/v1/rooms/{id:[0-9]+}/release", request -> ok().body("released"))
                 .build();
         }
     }

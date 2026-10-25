@@ -44,18 +44,18 @@ class HotelController {
         return hotelService.listHotels(page, size);
     }
 
-    @GetMapping("/{id}")
+    @GetMapping("/{id:[0-9]+}")
     private HotelResponse getHotel(@PathVariable @Positive long id) {
         return hotelService.getHotel(id);
     }
 
-    @PatchMapping("/{id}")
+    @PatchMapping("/{id:[0-9]+}")
     private HotelResponse updateHotel(@PathVariable @Positive long id,
                                       @Valid @RequestBody UpdateHotelRequest request) {
         return hotelService.updateHotel(id, request);
     }
 
-    @DeleteMapping("/{id}")
+    @DeleteMapping("/{id:[0-9]+}")
     @ResponseStatus(NO_CONTENT)
     private void deleteHotel(@PathVariable @Positive long id) {
         hotelService.deleteHotel(id);

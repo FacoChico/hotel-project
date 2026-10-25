@@ -410,7 +410,7 @@ class UserManagementTests {
     @ParameterizedTest
     @ValueSource(strings = {
         "?page=-1", "?size=0", "?size=101", "?page=-1&size=0",
-        "?page=abc", "?page=2147483648", "/0", "/-1", "/abc",
+        "?page=abc", "?page=2147483648", "/0",
         "/9223372036854775808"
     })
     @SneakyThrows
@@ -422,6 +422,27 @@ class UserManagementTests {
         result.andExpect(status().isBadRequest())
             .andExpect(content().contentTypeCompatibleWith(APPLICATION_PROBLEM_JSON))
             .andExpect(jsonPath("$.code").exists());
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+        "GET, abc",
+        "PATCH, abc",
+        "DELETE, abc",
+        "GET, -1",
+        "PATCH, -1",
+        "DELETE, -1"
+    })
+    @SneakyThrows
+    void shouldReturnNotFoundWhenUserPathIdIsNotNumeric(String method, String id) {
+        final var payload = method.equals("PATCH")
+            ? Map.of("username", "hotel_guest")
+            : null;
+
+        final var result = mockMvc.perform(getAdminRequest(HttpMethod.valueOf(method),
+            "/api/v1/users/" + id, payload));
+
+        result.andExpect(status().isNotFound());
     }
 
     @Test

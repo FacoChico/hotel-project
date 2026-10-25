@@ -44,18 +44,18 @@ class UserController {
         return userService.listUsers(page, size);
     }
 
-    @GetMapping("/{id}")
+    @GetMapping("/{id:[0-9]+}")
     private UserResponse getUser(@PathVariable @Positive long id) {
         return userService.getUser(id);
     }
 
-    @PatchMapping("/{id}")
+    @PatchMapping("/{id:[0-9]+}")
     private UserResponse updateUser(@PathVariable @Positive long id,
                                     @Valid @RequestBody UpdateUserRequest request) {
         return userService.updateUser(id, request);
     }
 
-    @DeleteMapping("/{id}")
+    @DeleteMapping("/{id:[0-9]+}")
     @ResponseStatus(NO_CONTENT)
     private void deleteUser(@PathVariable @Positive long id) {
         userService.deleteUser(id);

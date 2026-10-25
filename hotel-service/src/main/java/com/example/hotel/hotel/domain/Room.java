@@ -45,4 +45,9 @@ public class Room {
         this.number = number;
         this.available = available;
     }
+
+    public void updateDetails(String number, boolean available) {
+        this.number = number;
+        this.available = available;
+    }
 }
