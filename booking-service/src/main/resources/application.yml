@@ -54,3 +54,5 @@ security:
     audience: ${JWT_AUDIENCE:hotel-api}
     public-key: ${JWT_PUBLIC_KEY:}
     private-key: ${JWT_PRIVATE_KEY:}
+  service-jwt:
+    audience: ${SERVICE_JWT_AUDIENCE:hotel-internal}

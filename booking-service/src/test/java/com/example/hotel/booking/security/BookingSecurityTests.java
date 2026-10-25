@@ -70,10 +70,24 @@ class BookingSecurityTests {
     private MockMvc mockMvc;
     @Autowired
     private JwtTokenService tokenService;
+    @Autowired
+    private InternalTokenService internalTokenService;
 
     @DynamicPropertySource
     static void registerJwtProperties(DynamicPropertyRegistry registry) {
         JwtTestKeys.registerProperties(registry);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"/api/v1/users", "/api/v1/bookings", "/actuator/info"})
+    @SneakyThrows
+    void shouldRejectServiceTokenWhenUserAuthenticationIsRequired(String path) {
+        final var token = internalTokenService.issueToken();
+
+        final var response = mockMvc.perform(get(path).header(AUTHORIZATION, "Bearer " + token));
+
+        response.andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
     }
 
     @ParameterizedTest

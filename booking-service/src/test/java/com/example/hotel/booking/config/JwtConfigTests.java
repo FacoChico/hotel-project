@@ -31,7 +31,8 @@ class JwtConfigTests {
     void shouldFailStartupWhenJwtSettingsAreMissing() {
         var contextRunner = new ApplicationContextRunner()
             .withConfiguration(AutoConfigurations.of(ValidationAutoConfiguration.class))
-            .withUserConfiguration(JwtConfig.class);
+            .withUserConfiguration(JwtConfig.class)
+            .withPropertyValues("security.service-jwt.audience=hotel-internal");
 
         contextRunner.run(context -> {
             assertThat(context).hasFailed();
