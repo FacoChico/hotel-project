@@ -5,8 +5,10 @@ import com.example.hotel.booking.controller.dto.UpdateUserRequest;
 import com.example.hotel.booking.controller.dto.UserPageResponse;
 import com.example.hotel.booking.controller.dto.UserResponse;
 import com.example.hotel.booking.domain.User;
+import com.example.hotel.booking.repository.BookingRepository;
 import com.example.hotel.booking.repository.UserRepository;
 import com.example.hotel.booking.service.exception.EmptyUserUpdateException;
+import com.example.hotel.booking.service.exception.UserHasBookingsException;
 import com.example.hotel.booking.service.exception.UserNotFoundException;
 import com.example.hotel.booking.service.exception.UsernameAlreadyExistsException;
 
@@ -28,6 +30,7 @@ import static java.util.Locale.ROOT;
 @RequiredArgsConstructor
 public class UserService {
     private final UserRepository userRepository;
+    private final BookingRepository bookingRepository;
     private final PasswordEncoder passwordEncoder;
 
     @Transactional
@@ -87,7 +90,17 @@ public class UserService {
 
     @Transactional
     public void deleteUser(long id) {
-        userRepository.delete(findUser(id));
+        final var user = findUser(id);
+        if (bookingRepository.existsByUserId(id)) {
+            throw new UserHasBookingsException();
+        }
+
+        try {
+            userRepository.delete(user);
+            userRepository.flush();
+        } catch (DataIntegrityViolationException exception) {
+            throw evaluatePersistenceException(exception);
+        }
     }
 
     private User findUser(long id) {
@@ -105,9 +118,14 @@ public class UserService {
 
     private static RuntimeException evaluatePersistenceException(DataIntegrityViolationException exception) {
         if (exception.getCause() instanceof ConstraintViolationException constraint
-            && constraint.getConstraintName() != null
-            && constraint.getConstraintName().toLowerCase(ROOT).contains("uk_users_username")) {
-            return new UsernameAlreadyExistsException(exception);
+            && constraint.getConstraintName() != null) {
+            final var constraintName = constraint.getConstraintName().toLowerCase(ROOT);
+            if (constraintName.contains("uk_users_username")) {
+                return new UsernameAlreadyExistsException(exception);
+            }
+            if (constraintName.contains("fk_bookings_user")) {
+                return new UserHasBookingsException(exception);
+            }
         }
         return exception;
     }
