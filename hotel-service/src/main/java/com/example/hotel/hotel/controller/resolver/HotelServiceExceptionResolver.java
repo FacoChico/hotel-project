@@ -4,10 +4,17 @@ import com.example.hotel.hotel.service.exception.EmptyHotelUpdateException;
 import com.example.hotel.hotel.service.exception.EmptyRoomUpdateException;
 import com.example.hotel.hotel.service.exception.HotelHasRoomsException;
 import com.example.hotel.hotel.service.exception.HotelNotFoundException;
+import com.example.hotel.hotel.service.exception.IdempotencyConflictException;
+import com.example.hotel.hotel.service.exception.InvalidReservationDatesException;
+import com.example.hotel.hotel.service.exception.ReservationReleasedException;
+import com.example.hotel.hotel.service.exception.RoomHasFutureReservationsException;
+import com.example.hotel.hotel.service.exception.RoomHasReservationsException;
 import com.example.hotel.hotel.service.exception.RoomNotFoundException;
 import com.example.hotel.hotel.service.exception.RoomNumberAlreadyExistsException;
+import com.example.hotel.hotel.service.exception.RoomUnavailableException;
 
 import org.springframework.beans.TypeMismatchException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -29,6 +36,7 @@ import static org.springframework.http.HttpStatus.BAD_REQUEST;
 import static org.springframework.http.HttpStatus.CONFLICT;
 import static org.springframework.http.HttpStatus.METHOD_NOT_ALLOWED;
 import static org.springframework.http.HttpStatus.NOT_FOUND;
+import static org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE;
 
 @RestControllerAdvice
 class HotelServiceExceptionResolver extends ResponseEntityExceptionHandler {
@@ -67,6 +75,48 @@ class HotelServiceExceptionResolver extends ResponseEntityExceptionHandler {
     private static ResponseEntity<ProblemDetail> handleEmptyRoomUpdate(EmptyRoomUpdateException exception) {
         return ResponseEntity.badRequest()
             .body(getProblemDetails(BAD_REQUEST, "VALIDATION_FAILED", exception.getMessage()));
+    }
+
+    @ExceptionHandler(RoomUnavailableException.class)
+    private static ResponseEntity<ProblemDetail> handleRoomUnavailable(RoomUnavailableException exception) {
+        return ResponseEntity.status(CONFLICT)
+            .body(getProblemDetails(CONFLICT, "ROOM_UNAVAILABLE", exception.getMessage()));
+    }
+
+    @ExceptionHandler(ReservationReleasedException.class)
+    private static ResponseEntity<ProblemDetail> handleReservationReleased(ReservationReleasedException exception) {
+        return ResponseEntity.status(CONFLICT)
+            .body(getProblemDetails(CONFLICT, "RESERVATION_RELEASED", exception.getMessage()));
+    }
+
+    @ExceptionHandler(IdempotencyConflictException.class)
+    private static ResponseEntity<ProblemDetail> handleIdempotencyConflict(IdempotencyConflictException exception) {
+        return ResponseEntity.status(CONFLICT)
+            .body(getProblemDetails(CONFLICT, "IDEMPOTENCY_CONFLICT", exception.getMessage()));
+    }
+
+    @ExceptionHandler(RoomHasReservationsException.class)
+    private static ResponseEntity<ProblemDetail> handleRoomHasReservations(RoomHasReservationsException exception) {
+        return ResponseEntity.status(CONFLICT)
+            .body(getProblemDetails(CONFLICT, "ROOM_HAS_RESERVATIONS", exception.getMessage()));
+    }
+
+    @ExceptionHandler(RoomHasFutureReservationsException.class)
+    private static ResponseEntity<ProblemDetail> handleRoomHasFutureReservations(RoomHasFutureReservationsException exception) {
+        return ResponseEntity.status(CONFLICT)
+            .body(getProblemDetails(CONFLICT, "ROOM_HAS_FUTURE_RESERVATIONS", exception.getMessage()));
+    }
+
+    @ExceptionHandler(InvalidReservationDatesException.class)
+    private static ResponseEntity<ProblemDetail> handleInvalidReservationDates(InvalidReservationDatesException exception) {
+        return ResponseEntity.status(BAD_REQUEST)
+            .body(getProblemDetails(BAD_REQUEST, "VALIDATION_FAILED", exception.getMessage()));
+    }
+
+    @ExceptionHandler(PessimisticLockingFailureException.class)
+    private static ResponseEntity<ProblemDetail> handleRoomLockFailure() {
+        return ResponseEntity.status(SERVICE_UNAVAILABLE)
+            .body(getProblemDetails(SERVICE_UNAVAILABLE, "ROOM_BUSY", "Room is temporarily busy"));
     }
 
     @Override
