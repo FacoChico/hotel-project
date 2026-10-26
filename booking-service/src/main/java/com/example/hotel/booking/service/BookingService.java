@@ -42,7 +42,7 @@ public class BookingService {
     private final HotelServiceGateway hotelServiceGateway;
     private final BookingRepository bookingRepository;
 
-    public BookingCreationResult createBooking(long userId, CreateBookingRequest request) {
+    public BookingCreationResult createBooking(long userId, CreateBookingRequest request, String userToken) {
         final var acceptance = accept(userId, request);
         var booking = acceptance.booking();
         if (!acceptance.created()) {
@@ -50,8 +50,16 @@ public class BookingService {
         }
 
         try {
-            hotelServiceGateway.confirm(booking, booking.getDeadlineAt());
+            if (booking.isAutoSelect()) {
+                booking = selectAndReserveRoom(booking, userToken);
+            } else {
+                hotelServiceGateway.confirm(booking, booking.getDeadlineAt());
+            }
             booking = transactions.confirm(booking.getId());
+        } catch (BookingCreationException exception) {
+            booking = cancelAndRelease(booking);
+            throw new BookingCreationException(exception.getStatus(), exception.getCode(), exception.getMessage(),
+                booking.getId(), booking.isReleasePending(), exception);
         } catch (HotelServiceException exception) {
             throw compensate(booking, exception);
         } catch (DataAccessException exception) {
@@ -75,6 +83,24 @@ public class BookingService {
                 booking.getId(), booking.isReleasePending(), null);
         }
         return new BookingCreationResult(toResponse(booking), true);
+    }
+
+    private Booking selectAndReserveRoom(Booking booking, String userToken) {
+        final var candidates = hotelServiceGateway.recommend(booking, userToken, booking.getDeadlineAt()).iterator();
+        while (candidates.hasNext()) {
+            booking = transactions.selectRoom(booking.getId(), candidates.next());
+            try {
+                hotelServiceGateway.confirm(booking, booking.getDeadlineAt());
+                return booking;
+            } catch (HotelServiceException exception) {
+                final var roomIsUnavailable = "ROOM_UNAVAILABLE".equals(exception.getCode());
+                if (!roomIsUnavailable || !candidates.hasNext()) {
+                    throw exception;
+                }
+                hotelServiceGateway.release(booking, booking.getDeadlineAt());
+            }
+        }
+        throw new HotelServiceException(CONFLICT, "ROOM_UNAVAILABLE", "No recommended room is available", false);
     }
 
     @Transactional(readOnly = true)

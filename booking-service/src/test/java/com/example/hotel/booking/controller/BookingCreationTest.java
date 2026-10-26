@@ -9,6 +9,7 @@ import com.example.hotel.booking.repository.BookingRepository;
 import com.example.hotel.booking.repository.UserRepository;
 import com.example.hotel.booking.security.InternalTokenService;
 import com.example.hotel.booking.security.JwtTokenService;
+import com.example.hotel.booking.service.BookingRecoveryService;
 import com.example.hotel.booking.service.BookingTransactions;
 import com.example.hotel.booking.testutil.JwtTestKeys;
 import com.nimbusds.jose.JWSVerifier;
@@ -124,6 +125,8 @@ class BookingCreationTest {
     @MockitoSpyBean
     private BookingTransactions transactions;
     @Autowired
+    private BookingRecoveryService recoveryService;
+    @Autowired
     private JwtTokenService tokenService;
     @Autowired
     private InternalTokenService internalTokenService;
@@ -201,6 +204,231 @@ class BookingCreationTest {
         assertThat(request.claims().getStringClaim("scope")).isEqualTo("reservations:write");
         assertThat(request.signatureVerified()).isTrue();
         assertThat(HOTEL_REQUESTS).hasSize(1);
+    }
+
+    @Test
+    @SneakyThrows
+    void shouldSelectFirstRecommendationWhenAutomaticSelectionIsRequested() {
+        final var payload = automaticRequest();
+        final var userToken = tokenService.issueToken(user.getId(), USER);
+        HOTEL_HANDLER.set(request -> {
+            final var persisted = bookingRepository.findAll().getFirst();
+            assertThat(persisted.isAutoSelect()).isTrue();
+            assertThat(persisted.getHotelId()).isEqualTo(11L);
+            if (request.path().endsWith("recommend")) {
+                assertThat(persisted.getRoomId()).isNull();
+                assertThat(request.exchange().getRequestMethod()).isEqualTo("GET");
+                assertThat(request.exchange().getRequestURI().getQuery()).isEqualTo(
+                    "hotelId=11&startDate=" + payload.get("startDate") + "&endDate=" + payload.get("endDate")
+                        + "&page=0&size=20");
+                assertThat(request.exchange().getRequestHeaders().getFirst(AUTHORIZATION))
+                    .isEqualTo("Bearer " + userToken);
+            } else {
+                assertThat(persisted.getRoomId()).isEqualTo(43L);
+                assertThat(request.claims().getAudience()).containsExactly("hotel-internal");
+            }
+            respondSuccessfully(request);
+        });
+
+        final var result = create(payload, userToken);
+
+        assertThat(result.getResponse().getStatus()).isEqualTo(201);
+        final var response = JSON.readTree(result.getResponse().getContentAsString());
+        assertThat(response.get("roomId").longValue()).isEqualTo(43L);
+        assertThat(response.get("status").asString()).isEqualTo("CONFIRMED");
+        assertThat(bookingRepository.findAll().getFirst().getRoomId()).isEqualTo(43L);
+        assertThat(HOTEL_REQUESTS).extracting(HotelRequest::path)
+            .containsExactly("/api/v1/rooms/recommend", "/api/v1/rooms/43/confirm-availability");
+    }
+
+    @Test
+    @SneakyThrows
+    void shouldIgnoreRoomIdWhenAutomaticRequestIsRepeated() {
+        final var payload = automaticRequest();
+        payload.put("roomId", -1);
+        final var first = create(payload);
+        payload.put("roomId", 999);
+
+        final var repeated = create(payload);
+
+        assertThat(first.getResponse().getStatus()).isEqualTo(201);
+        assertThat(repeated.getResponse().getStatus()).isEqualTo(200);
+        assertThat(JSON.readTree(repeated.getResponse().getContentAsString()))
+            .isEqualTo(JSON.readTree(first.getResponse().getContentAsString()));
+        assertThat(bookingRepository.count()).isEqualTo(1);
+        assertThat(HOTEL_REQUESTS).hasSize(2);
+    }
+
+    @Test
+    @SneakyThrows
+    void shouldRejectAutomaticRepeatWhenHotelChanges() {
+        final var payload = automaticRequest();
+        create(payload);
+        payload.put("hotelId", 12);
+
+        final var result = create(payload);
+
+        assertThat(result.getResponse().getStatus()).isEqualTo(409);
+        assertThat(JSON.readTree(result.getResponse().getContentAsString()).get("code").asString())
+            .isEqualTo("IDEMPOTENCY_CONFLICT");
+        assertThat(HOTEL_REQUESTS).hasSize(2);
+    }
+
+    @Test
+    @SneakyThrows
+    void shouldTryNextRecommendationWhenFirstRoomBecomesUnavailable() {
+        HOTEL_HANDLER.set(request -> {
+            if (request.path().equals("/api/v1/rooms/43/confirm-availability")) {
+                respond(request, 409, Map.of("code", "ROOM_UNAVAILABLE"));
+            } else {
+                respondSuccessfully(request);
+            }
+        });
+
+        final var result = create(automaticRequest());
+
+        assertThat(result.getResponse().getStatus()).isEqualTo(201);
+        assertThat(bookingRepository.findAll().getFirst().getRoomId()).isEqualTo(42L);
+        assertThat(HOTEL_REQUESTS).extracting(HotelRequest::path).containsExactly(
+            "/api/v1/rooms/recommend", "/api/v1/rooms/43/confirm-availability",
+            "/api/v1/rooms/43/release", "/api/v1/rooms/42/confirm-availability");
+        assertThat(requests("release").getFirst().body().get("reason").asString()).isEqualTo("COMPENSATION");
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    @SneakyThrows
+    void shouldCancelAutomaticBookingWhenRecommendationsAreExhausted(boolean empty) {
+        HOTEL_HANDLER.set(request -> {
+            if (request.path().endsWith("recommend")) {
+                respondRecommendations(request, empty
+                    ? List.of()
+                    : List.of(43L, 42L));
+            } else if (request.path().endsWith("confirm-availability")) {
+                respond(request, 409, Map.of("code", "ROOM_UNAVAILABLE"));
+            } else {
+                respondSuccessfully(request);
+            }
+        });
+
+        final var result = create(automaticRequest());
+        final var booking = bookingRepository.findAll().getFirst();
+
+        assertThat(result.getResponse().getStatus()).isEqualTo(409);
+        assertThat(JSON.readTree(result.getResponse().getContentAsString()).get("code").asString())
+            .isEqualTo("ROOM_UNAVAILABLE");
+        assertThat(booking.getStatus()).isEqualTo(CANCELLED);
+        assertThat(booking.isReleasePending()).isFalse();
+        assertThat(requests("recommend")).hasSize(1);
+        assertThat(requests("confirm-availability")).hasSize(empty
+            ? 0
+            : 2);
+        assertThat(requests("release")).hasSize(empty
+            ? 0
+            : 2);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    @SneakyThrows
+    void shouldStopSelectionWhenConfirmationOutcomeIsUnknown(boolean releaseSucceeds) {
+        HOTEL_HANDLER.set(request -> {
+            if (request.path().endsWith("recommend")) {
+                respondSuccessfully(request);
+            } else if (request.path().endsWith("release") && releaseSucceeds) {
+                respondSuccessfully(request);
+            } else {
+                request.exchange().close();
+            }
+        });
+
+        final var result = create(automaticRequest());
+        final var booking = bookingRepository.findAll().getFirst();
+
+        assertThat(result.getResponse().getStatus()).isEqualTo(503);
+        assertThat(booking.getStatus()).isEqualTo(CANCELLED);
+        assertThat(booking.getRoomId()).isEqualTo(43L);
+        assertThat(booking.getReleaseReason()).isEqualTo(COMPENSATION);
+        assertThat(booking.isReleasePending()).isEqualTo(!releaseSucceeds);
+        assertThat(HOTEL_REQUESTS).allSatisfy(request ->
+            assertThat(request.path()).doesNotContain("/42/"));
+        assertThat(requests("confirm-availability")).hasSize(3);
+        assertThat(requests("release")).isNotEmpty();
+    }
+
+    @Test
+    @SneakyThrows
+    void shouldCancelWithoutReleaseWhenRecommendationsCannotBeRead() {
+        HOTEL_HANDLER.set(request -> respond(request, 503, Map.of()));
+
+        final var result = create(automaticRequest());
+        final var booking = bookingRepository.findAll().getFirst();
+
+        assertThat(result.getResponse().getStatus()).isEqualTo(503);
+        assertThat(booking.getStatus()).isEqualTo(CANCELLED);
+        assertThat(booking.getRoomId()).isNull();
+        assertThat(booking.isReleasePending()).isFalse();
+        assertThat(HOTEL_REQUESTS).extracting(HotelRequest::path)
+            .containsOnly("/api/v1/rooms/recommend");
+        assertThat(HOTEL_REQUESTS).hasSize(3);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"user-cancellation", "recovery", "deadline"})
+    @SneakyThrows
+    void shouldKeepRoomUnassignedWhenSelectionStopsDuringRecommendationRead(String cause) {
+        HOTEL_HANDLER.set(request -> {
+            final var booking = bookingRepository.findAll().getFirst();
+            if (cause.equals("user-cancellation")) {
+                assertThat(cancel(booking.getId()).getResponse().getStatus()).isEqualTo(200);
+            } else {
+                CLOCK_OFFSET.set(Duration.ofMinutes(1));
+                if (cause.equals("recovery")) {
+                    recoveryService.recoverBookings();
+                }
+            }
+            respondSuccessfully(request);
+        });
+
+        final var result = create(automaticRequest());
+        final var booking = bookingRepository.findAll().getFirst();
+
+        assertThat(result.getResponse().getStatus()).isEqualTo(cause.equals("deadline")
+            ? 504
+            : 409);
+        assertThat(JSON.readTree(result.getResponse().getContentAsString()).get("code").asString())
+            .isEqualTo(cause.equals("deadline")
+                ? "BOOKING_TIMEOUT"
+                : "BOOKING_CANCELLED");
+        assertThat(booking.getStatus()).isEqualTo(CANCELLED);
+        assertThat(booking.getRoomId()).isNull();
+        assertThat(booking.isReleasePending()).isFalse();
+        assertThat(HOTEL_REQUESTS).hasSize(1);
+    }
+
+    @Test
+    @SneakyThrows
+    void shouldKeepSelectedRoomWhenCancellationWinsBeforeNextCandidate() {
+        final var cancellationStarted = new AtomicInteger();
+        HOTEL_HANDLER.set(request -> {
+            if (request.path().endsWith("confirm-availability")) {
+                respond(request, 409, Map.of("code", "ROOM_UNAVAILABLE"));
+            } else {
+                if (request.path().endsWith("release") && cancellationStarted.getAndIncrement() == 0) {
+                    assertThat(cancel(bookingRepository.findAll().getFirst().getId()).getResponse().getStatus())
+                        .isEqualTo(200);
+                }
+                respondSuccessfully(request);
+            }
+        });
+
+        final var result = create(automaticRequest());
+        final var booking = bookingRepository.findAll().getFirst();
+
+        assertThat(result.getResponse().getStatus()).isEqualTo(409);
+        assertThat(booking.getStatus()).isEqualTo(CANCELLED);
+        assertThat(booking.getRoomId()).isEqualTo(43L);
+        assertThat(requests("confirm-availability")).hasSize(1);
     }
 
     @Test
@@ -809,6 +1037,14 @@ class BookingCreationTest {
         assertThat(HOTEL_REQUESTS).isEmpty();
     }
 
+    private Map<String, Object> automaticRequest() {
+        final var payload = validRequest();
+        payload.put("autoSelect", true);
+        payload.put("hotelId", 11);
+        payload.remove("roomId");
+        return payload;
+    }
+
     private Map<String, Object> validRequest() {
         final var payload = new LinkedHashMap<String, Object>();
         payload.put("requestId", randomUUID().toString());
@@ -864,11 +1100,22 @@ class BookingCreationTest {
     }
 
     private static void respondSuccessfully(HotelRequest request) {
+        if (request.path().endsWith("recommend")) {
+            respondRecommendations(request, List.of(43L, 42L));
+            return;
+        }
         respond(request, 200, Map.of("bookingId", request.body().get("bookingId").longValue(),
             "roomId", Long.parseLong(request.path().split("/")[4]),
             "state", request.path().endsWith("release")
                 ? "RELEASED"
                 : "RESERVED"));
+    }
+
+    private static void respondRecommendations(HotelRequest request, List<Long> roomIds) {
+        final var rooms = roomIds.stream()
+            .map(id -> Map.of("id", id, "hotelId", 11, "number", "Room " + id, "available", true, "timesBooked", 0))
+            .toList();
+        respond(request, 200, Map.of("content", rooms, "page", 0, "size", 20, "totalElements", rooms.size()));
     }
 
     private static void respond(HotelRequest request, int status, Object body) {
@@ -918,7 +1165,8 @@ class BookingCreationTest {
             Map.of("requestId", "invalid"),
             Map.of("autoSelect", "false"),
             Map.of("autoSelect", 0),
-            Map.of("autoSelect", true, "hotelId", 11),
+            Map.of("autoSelect", true),
+            Map.of("autoSelect", true, "hotelId", 0),
             Map.of("roomId", 0),
             Map.of("roomId", -1),
             Map.of("roomId", 1.5),

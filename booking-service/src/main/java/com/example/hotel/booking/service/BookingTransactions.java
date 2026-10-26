@@ -5,6 +5,7 @@ import com.example.hotel.booking.domain.Booking;
 import com.example.hotel.booking.properties.HotelClientProperties;
 import com.example.hotel.booking.repository.BookingRepository;
 import com.example.hotel.booking.repository.UserRepository;
+import com.example.hotel.booking.service.exception.BookingCreationException;
 import com.example.hotel.booking.service.exception.BookingIdempotencyConflictException;
 import com.example.hotel.booking.service.exception.BookingNotFoundException;
 import com.example.hotel.booking.service.exception.InvalidBookingRequestException;
@@ -28,6 +29,8 @@ import static com.example.hotel.booking.domain.BookingStatus.CANCELLED;
 import static com.example.hotel.booking.domain.BookingStatus.PENDING;
 import static java.time.ZoneOffset.UTC;
 import static java.time.temporal.ChronoUnit.MICROS;
+import static org.springframework.http.HttpStatus.CONFLICT;
+import static org.springframework.http.HttpStatus.GATEWAY_TIMEOUT;
 
 @Service
 @RequiredArgsConstructor
@@ -46,10 +49,16 @@ public class BookingTransactions {
         }
 
         if (request.autoSelect()) {
-            throw new InvalidBookingRequestException("Automatic room selection is not available yet");
-        }
-        if (request.roomId() == null || request.hotelId() != null) {
-            throw new InvalidBookingRequestException("Explicit selection requires roomId without hotelId");
+            if (request.hotelId() == null) {
+                throw new InvalidBookingRequestException("Automatic selection requires hotelId");
+            }
+        } else {
+            final var roomIsMissing = request.roomId() == null;
+            final var roomIsInvalid = !roomIsMissing && request.roomId() <= 0;
+            final var hotelIsProvided = request.hotelId() != null;
+            if (roomIsMissing || roomIsInvalid || hotelIsProvided) {
+                throw new InvalidBookingRequestException("Explicit selection requires positive roomId without hotelId");
+            }
         }
 
         final var now = clock.instant().truncatedTo(MICROS);
@@ -58,8 +67,10 @@ public class BookingTransactions {
             throw new InvalidBookingRequestException("Booking dates must form a future or current-day stay");
         }
         final var user = userRepository.findById(userId).orElseThrow(UserNotFoundException::new);
-        final var booking = bookingRepository.saveAndFlush(new Booking(user, request.requestId(), false,
-            null, request.roomId(), request.startDate(), request.endDate(), now,
+        final var booking = bookingRepository.saveAndFlush(new Booking(user, request.requestId(), request.autoSelect(),
+            request.hotelId(), request.autoSelect()
+            ? null
+            : request.roomId(), request.startDate(), request.endDate(), now,
             now.plusMillis(properties.operationTimeoutMs())));
         log.info("Booking accepted bookingId={} requestId={} roomId={} status={}",
             booking.getId(), booking.getRequestId(), booking.getRoomId(), booking.getStatus());
@@ -95,6 +106,26 @@ public class BookingTransactions {
         final var sameRoom = Objects.equals(booking.getRoomId(), request.roomId());
         final var hotelNotProvided = request.hotelId() == null;
         return sameRoom && hotelNotProvided;
+    }
+
+    @Transactional
+    public Booking selectRoom(long bookingId, long roomId) {
+        final var booking = findLocked(bookingId);
+        if (!booking.selectRoom(roomId, clock.instant())) {
+            final var cancelled = booking.getStatus() == CANCELLED;
+            throw new BookingCreationException(cancelled
+                ? CONFLICT
+                : GATEWAY_TIMEOUT,
+                cancelled
+                    ? "BOOKING_CANCELLED"
+                    : "BOOKING_TIMEOUT",
+                cancelled
+                    ? "Booking was cancelled during selection"
+                    : "Booking waiting budget exhausted",
+                bookingId, booking.isReleasePending(), null);
+        }
+        logTransition(booking);
+        return booking;
     }
 
     @Transactional

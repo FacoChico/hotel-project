@@ -4,8 +4,11 @@ import com.example.hotel.booking.domain.Booking;
 import com.example.hotel.booking.gateway.exception.HotelServiceException;
 import com.example.hotel.booking.properties.HotelClientProperties;
 import com.example.hotel.booking.security.InternalTokenService;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import org.springframework.cloud.client.loadbalancer.LoadBalanced;
+import org.springframework.http.HttpRequest;
+import org.springframework.http.client.ClientHttpResponse;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.ResourceAccessException;
@@ -18,13 +21,16 @@ import java.net.http.HttpTimeoutException;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.Function;
 
 import lombok.extern.slf4j.Slf4j;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.json.JsonMapper;
 
+import static com.example.hotel.booking.domain.BookingReleaseReason.COMPENSATION;
 import static java.lang.System.nanoTime;
 import static java.time.Duration.ofMillis;
 import static org.springframework.http.HttpStatus.CONFLICT;
@@ -57,33 +63,30 @@ public class HotelServiceGateway {
     }
 
     public void confirm(Booking booking, Instant deadline) {
-        executeRequest(
-            booking,
-            "confirm-availability",
-            Map.of(
+        executeRequest(booking, "confirm-availability", deadline, client -> {
+            sendReservation(client, booking, "confirm-availability", Map.of(
                 "bookingId", booking.getId(),
                 "requestId", booking.getRequestId(),
                 "startDate", booking.getStartDate(),
                 "endDate", booking.getEndDate()
-            ),
-            "RESERVED",
-            deadline
-        );
+            ), "RESERVED");
+            return null;
+        });
     }
 
     public void release(Booking booking, Instant deadline) {
         try {
-            executeRequest(
-                booking,
-                "release",
-                Map.of(
+            executeRequest(booking, "release", deadline, client -> {
+                final var reason = booking.getReleaseReason() == null
+                    ? COMPENSATION
+                    : booking.getReleaseReason();
+                sendReservation(client, booking, "release", Map.of(
                     "bookingId", booking.getId(),
                     "requestId", booking.getRequestId(),
-                    "reason", booking.getReleaseReason()
-                ),
-                "RELEASED",
-                deadline
-            );
+                    "reason", reason
+                ), "RELEASED");
+                return null;
+            });
         } catch (HotelServiceException exception) {
             if (exception.getStatus() != NOT_FOUND) {
                 throw exception;
@@ -91,7 +94,34 @@ public class HotelServiceGateway {
         }
     }
 
-    private void executeRequest(Booking booking, String operation, Object body, String expectedState, Instant deadline) {
+    public List<Long> recommend(Booking booking, String userToken, Instant deadline) {
+        return executeRequest(booking, "recommend", deadline, client -> {
+            final var response = client.get()
+                .uri(builder -> builder.path("/api/v1/rooms/recommend")
+                    .queryParam("hotelId", booking.getHotelId())
+                    .queryParam("startDate", booking.getStartDate())
+                    .queryParam("endDate", booking.getEndDate())
+                    .queryParam("page", 0)
+                    .queryParam("size", 20)
+                    .build())
+                .headers(headers -> headers.setBearerAuth(userToken))
+                .retrieve()
+                .onStatus(status -> !status.is2xxSuccessful(), this::handleError)
+                .body(RecommendationsReply.class);
+
+            if (response == null || response.content() == null || response.content().size() > 20) {
+                throw HotelServiceException.unavailable(false);
+            }
+            final var validRooms = response.content().stream()
+                .allMatch(room -> room != null && room.id() > 0);
+            if (!validRooms) {
+                throw HotelServiceException.unavailable(false);
+            }
+            return response.content().stream().map(RecommendedRoom::id).toList();
+        });
+    }
+
+    private <T> T executeRequest(Booking booking, String operation, Instant deadline, Function<RestClient, T> request) {
         final var budget = Duration.between(clock.instant(), deadline);
         if (budget.isNegative()
             || budget.isZero()
@@ -109,8 +139,7 @@ public class HotelServiceGateway {
             log.info("Hotel request bookingId={} requestId={} roomId={} operation={} attempt={}",
                 booking.getId(), booking.getRequestId(), booking.getRoomId(), operation, attempt);
             try {
-                send(booking, operation, body, expectedState, remaining);
-                return;
+                return send(request, remaining);
             } catch (HotelServiceException exception) {
                 log.warn("Hotel request failed bookingId={} requestId={} roomId={} operation={} attempt={} code={}",
                     booking.getId(), booking.getRequestId(), booking.getRoomId(), operation, attempt, exception.getCode());
@@ -125,7 +154,7 @@ public class HotelServiceGateway {
         }
     }
 
-    private void send(Booking booking, String operation, Object body, String expectedState, Duration remaining) {
+    private <T> T send(Function<RestClient, T> request, Duration remaining) {
         final var factory = new JdkClientHttpRequestFactory(hotelHttpClient);
         final var readTimeout = remaining.compareTo(ofMillis(properties.readTimeoutMs())) < 0
             ? remaining
@@ -136,40 +165,7 @@ public class HotelServiceGateway {
             .build();
 
         try {
-            final var response = client.post()
-                .uri("/api/v1/rooms/{id}/{operation}", booking.getRoomId(), operation)
-                .headers(headers -> headers.setBearerAuth(tokenService.issueToken()))
-                .contentType(APPLICATION_JSON)
-                .body(body)
-                .retrieve()
-                .onStatus(status -> !status.is2xxSuccessful(), (request, reply) -> {
-                    final var status = reply.getStatusCode().value();
-                    if (status == 404 || status == 409) {
-                        final var problem = mapper.readTree(reply.getBody());
-                        if (problem != null) {
-                            final var code = problem.path("code").asString();
-                            if (status == 404 && "ROOM_NOT_FOUND".equals(code)) {
-                                throw new HotelServiceException(NOT_FOUND, "ROOM_NOT_FOUND", "Room not found", false);
-                            }
-                            if (status == 409 && "ROOM_UNAVAILABLE".equals(code)) {
-                                throw new HotelServiceException(CONFLICT, "ROOM_UNAVAILABLE", "Room is unavailable", false);
-                            }
-                            if (status == 409 && "RESERVATION_RELEASED".equals(code)) {
-                                throw new HotelServiceException(CONFLICT, "BOOKING_CANCELLED",
-                                    "Booking was cancelled during confirmation", false);
-                            }
-                        }
-                    }
-                    throw HotelServiceException.unavailable(status == 502 || status == 503 || status == 504);
-                })
-                .body(ReservationReply.class);
-
-            if (response == null
-                || response.bookingId() != booking.getId()
-                || response.roomId() != booking.getRoomId()
-                || !expectedState.equals(response.state())) {
-                throw HotelServiceException.unavailable(false);
-            }
+            return request.apply(client);
         } catch (ResourceAccessException exception) {
             if (Thread.currentThread().isInterrupted()) {
                 throw HotelServiceException.timeout();
@@ -187,6 +183,45 @@ public class HotelServiceGateway {
         }
     }
 
+    private void sendReservation(RestClient client, Booking booking, String operation, Object body, String expectedState) {
+        final var response = client.post()
+            .uri("/api/v1/rooms/{id}/{operation}", booking.getRoomId(), operation)
+            .headers(headers -> headers.setBearerAuth(tokenService.issueToken()))
+            .contentType(APPLICATION_JSON)
+            .body(body)
+            .retrieve()
+            .onStatus(status -> !status.is2xxSuccessful(), this::handleError)
+            .body(ReservationReply.class);
+
+        if (response == null
+            || response.bookingId() != booking.getId()
+            || response.roomId() != booking.getRoomId()
+            || !expectedState.equals(response.state())) {
+            throw HotelServiceException.unavailable(false);
+        }
+    }
+
+    private void handleError(HttpRequest request, ClientHttpResponse reply) throws IOException {
+        final var status = reply.getStatusCode().value();
+        if (status == 404 || status == 409) {
+            final var problem = mapper.readTree(reply.getBody());
+            if (problem != null) {
+                final var code = problem.path("code").asString();
+                if (status == 404 && "ROOM_NOT_FOUND".equals(code)) {
+                    throw new HotelServiceException(NOT_FOUND, "ROOM_NOT_FOUND", "Room not found", false);
+                }
+                if (status == 409 && "ROOM_UNAVAILABLE".equals(code)) {
+                    throw new HotelServiceException(CONFLICT, "ROOM_UNAVAILABLE", "Room is unavailable", false);
+                }
+                if (status == 409 && "RESERVATION_RELEASED".equals(code)) {
+                    throw new HotelServiceException(CONFLICT, "BOOKING_CANCELLED",
+                        "Booking was cancelled during confirmation", false);
+                }
+            }
+        }
+        throw HotelServiceException.unavailable(status == 502 || status == 503 || status == 504);
+    }
+
     private void pauseBeforeRetry(int attempt, Duration remaining) {
         final var maximumBackoff = Math.min(1000, properties.backoffMs() * (1L << (attempt - 1)));
         final var delay = ofMillis(ThreadLocalRandom.current().nextLong(maximumBackoff / 2, maximumBackoff + 1));
@@ -200,6 +235,14 @@ public class HotelServiceGateway {
             Thread.currentThread().interrupt();
             throw HotelServiceException.timeout();
         }
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record RecommendationsReply(List<RecommendedRoom> content) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record RecommendedRoom(long id) {
     }
 
     private record ReservationReply(
