@@ -1,13 +1,11 @@
 package com.example.hotel.booking.config;
 
 import com.example.hotel.booking.properties.JwtProperties;
-import com.example.hotel.booking.properties.ServiceJwtProperties;
 import com.example.hotel.booking.security.UserJwtValidator;
 import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.converter.RsaKeyConverters;
@@ -29,7 +27,6 @@ import java.time.Duration;
 import static org.springframework.security.oauth2.jose.jws.SignatureAlgorithm.RS256;
 
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties({JwtProperties.class, ServiceJwtProperties.class})
 public class JwtConfig {
     public static final Duration CLOCK_SKEW = Duration.ofSeconds(60);
 

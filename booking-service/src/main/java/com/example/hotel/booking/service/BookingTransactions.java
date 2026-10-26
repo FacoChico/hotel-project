@@ -9,16 +9,22 @@ import com.example.hotel.booking.service.exception.BookingIdempotencyConflictExc
 import com.example.hotel.booking.service.exception.InvalidBookingRequestException;
 import com.example.hotel.booking.service.exception.UserNotFoundException;
 
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import static com.example.hotel.booking.domain.BookingStatus.CANCELLED;
+import static com.example.hotel.booking.domain.BookingStatus.PENDING;
 import static java.time.ZoneOffset.UTC;
 import static java.time.temporal.ChronoUnit.MICROS;
 
@@ -112,6 +118,28 @@ public class BookingTransactions {
         booking.completeRelease();
         logTransition(booking);
         return booking;
+    }
+
+    @Transactional(readOnly = true)
+    public List<Long> findRecoveryCandidates(Instant now, int batchSize) {
+        return bookingRepository.findRecoveryCandidates(now, PENDING, CANCELLED, PageRequest.of(0, batchSize));
+    }
+
+    @Transactional
+    public Optional<Booking> claimRecovery(long bookingId, Instant retryAt) {
+        final var candidate = bookingRepository.findByIdForUpdate(bookingId);
+        final var now = clock.instant();
+        final var retryWindowIsExpired = !retryAt.isAfter(now);
+        if (candidate.isEmpty() || retryWindowIsExpired) {
+            return Optional.empty();
+        }
+
+        final var booking = candidate.orElseThrow();
+        final var claimed = booking.claimRecovery(now, retryAt);
+        logTransition(booking);
+        return claimed
+            ? Optional.of(booking)
+            : Optional.empty();
     }
 
     private Booking findLocked(long id) {

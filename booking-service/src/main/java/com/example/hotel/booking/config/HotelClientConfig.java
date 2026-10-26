@@ -2,7 +2,6 @@ package com.example.hotel.booking.config;
 
 import com.example.hotel.booking.properties.HotelClientProperties;
 
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.cloud.client.loadbalancer.LoadBalanced;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -17,7 +16,6 @@ import tools.jackson.databind.json.JsonMapper;
 import static java.time.Duration.ofMillis;
 
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties(HotelClientProperties.class)
 class HotelClientConfig {
 
     @Bean
