@@ -10,16 +10,11 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpMethod;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.web.servlet.function.RouterFunction;
-import org.springframework.web.servlet.function.ServerResponse;
 
 import java.net.URI;
 import java.time.Instant;
@@ -56,15 +51,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-import static org.springframework.web.servlet.function.RouterFunctions.route;
-import static org.springframework.web.servlet.function.ServerResponse.ok;
 
 @SpringBootTest(properties = {
     "eureka.client.enabled=false",
     "security.bootstrap-admin.enabled=false"
 })
 @AutoConfigureMockMvc(print = NONE)
-@Import(BookingSecurityTests.TestRoutesConfig.class)
 class BookingSecurityTests {
     @Autowired
     private MockMvc mockMvc;
@@ -93,7 +85,6 @@ class BookingSecurityTests {
     @ParameterizedTest
     @CsvSource({
         "USER, GET, /api/v1/bookings",
-        "USER, DELETE, /api/v1/bookings/1",
         "ADMIN, GET, /actuator/info"
     })
     @SneakyThrows
@@ -295,16 +286,5 @@ class BookingSecurityTests {
         claims.put("exp", Date.from(now.plusSeconds(3600)));
         claims.put("roles", List.of("USER"));
         return claims;
-    }
-
-    @TestConfiguration(proxyBeanMethods = false)
-    static class TestRoutesConfig {
-
-        @Bean
-        RouterFunction<ServerResponse> securityTestRoutes() {
-            return route()
-                .DELETE("/api/v1/bookings/{id:[0-9]+}", request -> ok().body("user"))
-                .build();
-        }
     }
 }

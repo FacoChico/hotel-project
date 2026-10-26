@@ -82,6 +82,7 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.springframework.boot.webmvc.test.autoconfigure.MockMvcPrint.NONE;
 import static org.springframework.http.HttpHeaders.AUTHORIZATION;
@@ -89,8 +90,10 @@ import static org.springframework.http.HttpHeaders.LOCATION;
 import static org.springframework.http.HttpStatus.GATEWAY_TIMEOUT;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.http.MediaType.APPLICATION_PROBLEM_JSON;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive;
 
 @SpringBootTest(properties = {
     "eureka.client.enabled=false",
@@ -481,9 +484,75 @@ class BookingCreationTest {
     void shouldKeepCancellationWhenCancellationWinsConfirmationRace() {
         HOTEL_HANDLER.set(request -> {
             if (request.path().endsWith("confirm-availability")) {
-                transactions.cancelPending(request.body().get("bookingId").longValue());
+                final var bookingId = request.body().get("bookingId").longValue();
+                assertThat(bookingRepository.findById(bookingId).orElseThrow().getStatus()).isEqualTo(PENDING);
+                assertThat(cancel(bookingId).getResponse().getStatus()).isEqualTo(200);
             }
             respondSuccessfully(request);
+        });
+
+        final var result = create(validRequest());
+
+        assertThat(result.getResponse().getStatus()).isEqualTo(409);
+        assertThat(JSON.readTree(result.getResponse().getContentAsString()).get("code").asString())
+            .isEqualTo("BOOKING_CANCELLED");
+        assertThat(bookingRepository.findAll().getFirst().getStatus()).isEqualTo(CANCELLED);
+        assertThat(bookingRepository.findAll().getFirst().isReleasePending()).isFalse();
+        assertThat(requests("release")).hasSize(1);
+        assertThat(requests("release").getFirst().body().get("reason").asString()).isEqualTo("COMPENSATION");
+    }
+
+    @Test
+    @SneakyThrows
+    void shouldUseUserCancellationWhenConfirmationWinsRowLockRace() {
+        // given
+        final var confirmationReady = new CountDownLatch(1);
+        final var allowConfirmationCommit = new CountDownLatch(1);
+        final var cancellationStarted = new CountDownLatch(1);
+        final var bookingId = new AtomicReference<Long>();
+        doAnswer(invocation -> {
+            final var confirmed = (Booking) invocation.callRealMethod();
+            assertThat(isActualTransactionActive()).isTrue();
+            bookingId.set(confirmed.getId());
+            confirmationReady.countDown();
+            await(allowConfirmationCommit);
+            return confirmed;
+        }).when(transactions).confirm(anyLong());
+        doAnswer(invocation -> {
+            cancellationStarted.countDown();
+            return invocation.callRealMethod();
+        }).when(transactions).cancelBooking(anyLong(), anyLong());
+        try (final var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            // when
+            final var creation = executor.submit(() -> create(validRequest()));
+            assertThat(confirmationReady.await(2, SECONDS)).isTrue();
+            final var cancellation = executor.submit(() -> cancel(bookingId.get()));
+            assertThat(cancellationStarted.await(2, SECONDS)).isTrue();
+            allowConfirmationCommit.countDown();
+            final var created = creation.get(2, SECONDS);
+            final var cancelled = cancellation.get(2, SECONDS);
+
+            // then
+            assertThat(created.getResponse().getStatus()).isEqualTo(201);
+            assertThat(cancelled.getResponse().getStatus()).isEqualTo(200);
+            assertThat(bookingRepository.findById(bookingId.get()).orElseThrow().getStatus()).isEqualTo(CANCELLED);
+            assertThat(requests("release")).hasSize(1);
+            assertThat(requests("release").getFirst().body().get("reason").asString()).isEqualTo("USER_CANCELLATION");
+        } finally {
+            allowConfirmationCommit.countDown();
+        }
+    }
+
+    @Test
+    @SneakyThrows
+    void shouldReportCancellationWhenHotelRejectsLateConfirmation() {
+        HOTEL_HANDLER.set(request -> {
+            if (request.path().endsWith("confirm-availability")) {
+                assertThat(cancel(request.body().get("bookingId").longValue()).getResponse().getStatus()).isEqualTo(200);
+                respond(request, 409, Map.of("code", "RESERVATION_RELEASED"));
+            } else {
+                respondSuccessfully(request);
+            }
         });
 
         final var result = create(validRequest());
@@ -758,6 +827,12 @@ class BookingCreationTest {
     private MvcResult create(Map<String, Object> payload, String token) {
         return mockMvc.perform(post("/api/v1/bookings").header(AUTHORIZATION, "Bearer " + token)
             .contentType(APPLICATION_JSON).content(JSON.writeValueAsBytes(payload))).andReturn();
+    }
+
+    @SneakyThrows
+    private MvcResult cancel(long bookingId) {
+        return mockMvc.perform(delete("/api/v1/bookings/{id}", bookingId)
+            .header(AUTHORIZATION, "Bearer " + tokenService.issueToken(user.getId(), USER))).andReturn();
     }
 
     private static List<HotelRequest> requests(String operation) {

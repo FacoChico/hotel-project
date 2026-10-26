@@ -8,6 +8,7 @@ import com.example.hotel.booking.service.BookingService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -42,7 +43,9 @@ class BookingController {
         final var booking = result.booking();
         final var status = result.created()
             ? CREATED
-            : booking.status() == PENDING ? ACCEPTED : OK;
+            : booking.status() == PENDING
+                ? ACCEPTED
+                : OK;
         return ResponseEntity.status(status)
             .location(URI.create("/api/v1/bookings/" + booking.id()))
             .body(booking);
@@ -58,5 +61,16 @@ class BookingController {
     @GetMapping("/{id:[0-9]+}")
     private BookingResponse getBooking(@AuthenticationPrincipal Jwt jwt, @PathVariable @Positive long id) {
         return bookingService.getBooking(Long.parseLong(jwt.getSubject()), id);
+    }
+
+    @DeleteMapping("/{id:[0-9]+}")
+    private ResponseEntity<BookingResponse> cancelBooking(@AuthenticationPrincipal Jwt jwt, @PathVariable @Positive long id) {
+        final var booking = bookingService.cancelBooking(Long.parseLong(jwt.getSubject()), id);
+        final var status = booking.releasePending()
+            ? ACCEPTED
+            : OK;
+        return ResponseEntity.status(status)
+            .location(URI.create("/api/v1/bookings/" + booking.id()))
+            .body(booking);
     }
 }

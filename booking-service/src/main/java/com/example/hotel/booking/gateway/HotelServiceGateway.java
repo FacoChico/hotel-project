@@ -154,6 +154,10 @@ public class HotelServiceGateway {
                             if (status == 409 && "ROOM_UNAVAILABLE".equals(code)) {
                                 throw new HotelServiceException(CONFLICT, "ROOM_UNAVAILABLE", "Room is unavailable", false);
                             }
+                            if (status == 409 && "RESERVATION_RELEASED".equals(code)) {
+                                throw new HotelServiceException(CONFLICT, "BOOKING_CANCELLED",
+                                    "Booking was cancelled during confirmation", false);
+                            }
                         }
                     }
                     throw HotelServiceException.unavailable(status == 502 || status == 503 || status == 504);
