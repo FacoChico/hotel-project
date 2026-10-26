@@ -7,6 +7,7 @@ import com.example.hotel.booking.domain.Booking;
 import com.example.hotel.booking.gateway.HotelServiceGateway;
 import com.example.hotel.booking.gateway.exception.HotelServiceException;
 import com.example.hotel.booking.repository.BookingRepository;
+import com.example.hotel.booking.service.exception.BookingCancellationException;
 import com.example.hotel.booking.service.exception.BookingCreationException;
 import com.example.hotel.booking.service.exception.BookingNotFoundException;
 import com.example.hotel.booking.service.exception.UserNotFoundException;
@@ -94,6 +95,33 @@ public class BookingService {
     public BookingResponse getBooking(long userId, long bookingId) {
         final var booking = bookingRepository.findByIdAndUserId(bookingId, userId)
             .orElseThrow(BookingNotFoundException::new);
+        return toResponse(booking);
+    }
+
+    public BookingResponse cancelBooking(long userId, long bookingId) {
+        final BookingTransactions.Cancellation cancellation;
+        try {
+            cancellation = transactions.cancelBooking(userId, bookingId);
+        } catch (DataAccessException exception) {
+            throw new BookingCancellationException(exception);
+        }
+
+        var booking = cancellation.booking();
+        final var releaseIsRequired = cancellation.transitioned() && booking.isReleasePending();
+        if (!releaseIsRequired) {
+            return toResponse(booking);
+        }
+
+        try {
+            hotelServiceGateway.release(booking, booking.getNextRecoveryAt());
+            booking = transactions.completeRelease(bookingId);
+        } catch (HotelServiceException | DataAccessException exception) {
+            final var code = exception instanceof HotelServiceException hotelException
+                ? hotelException.getCode()
+                : "BOOKING_STORAGE_UNAVAILABLE";
+            log.warn("Booking cancellation release incomplete bookingId={} requestId={} roomId={} reason={} code={}",
+                bookingId, booking.getRequestId(), booking.getRoomId(), booking.getReleaseReason(), code);
+        }
         return toResponse(booking);
     }
 

@@ -148,7 +148,6 @@ class GatewayRoutingTest {
         "GET, /api/v1/users/auth",
         "GET, /api/v1/users/register",
         "GET, /api/v1/booking",
-        "DELETE, /api/v1/booking/7",
         "PATCH, /api/v1/booking/7",
         "POST, /api/v1/booking/7",
         "POST, /api/v2/booking",
@@ -259,6 +258,7 @@ class GatewayRoutingTest {
     @CsvSource({
         "POST, /api/v1/booking?trace=one, /api/v1/bookings",
         "GET, /api/v1/booking/7?trace=one, /api/v1/bookings/7",
+        "DELETE, /api/v1/booking/7?trace=one, /api/v1/bookings/7",
         "GET, /api/v1/booking/0007?trace=one, /api/v1/bookings/0007"
     })
     @SneakyThrows
@@ -284,13 +284,18 @@ class GatewayRoutingTest {
     }
 
     @ParameterizedTest
-    @ValueSource(ints = {201, 202})
+    @CsvSource({
+        "POST, /api/v1/booking, 201",
+        "POST, /api/v1/booking, 202",
+        "DELETE, /api/v1/booking/42, 200",
+        "DELETE, /api/v1/booking/42, 202"
+    })
     @SneakyThrows
-    void shouldPreserveCreationResponseWhenBookingAliasIsUsed(int expectedStatus) {
+    void shouldPreserveResponseWhenBookingAliasReturnsLocation(String method, String path, int expectedStatus) {
         try (final var client = newHttpClient()) {
-            final var request = newBuilder(URI.create("http://127.0.0.1:" + applicationPort + "/api/v1/booking"))
+            final var request = newBuilder(URI.create("http://127.0.0.1:" + applicationPort + path))
                 .header("X-Test-Booking-Status", Integer.toString(expectedStatus))
-                .POST(noBody())
+                .method(method, noBody())
                 .build();
 
             final var response = client.send(request, ofString());
@@ -302,12 +307,21 @@ class GatewayRoutingTest {
     }
 
     @ParameterizedTest
-    @ValueSource(ints = {401, 403, 404, 409})
+    @CsvSource({
+        "GET,401",
+        "GET,403",
+        "GET,404",
+        "GET,409",
+        "DELETE,401",
+        "DELETE,403",
+        "DELETE,404",
+        "DELETE,409"
+    })
     @SneakyThrows
-    void shouldPreserveErrorWhenBackendRejectsBookingAlias(int expectedStatus) {
+    void shouldPreserveErrorWhenBackendRejectsBookingAlias(String method, int expectedStatus) {
         try (final var client = newHttpClient()) {
             final var request = newBuilder(URI.create("http://127.0.0.1:" + applicationPort + "/api/v1/booking/" + expectedStatus))
-                .GET().build();
+                .method(method, noBody()).build();
 
             final var response = client.send(request, ofString());
 
@@ -319,13 +333,20 @@ class GatewayRoutingTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"abc", "-1", "1.5"})
+    @CsvSource({
+        "GET,abc",
+        "GET,-1",
+        "GET,1.5",
+        "DELETE,abc",
+        "DELETE,-1",
+        "DELETE,1.5"
+    })
     @SneakyThrows
-    void shouldRejectBookingAliasWhenIdIsNotNumeric(String id) {
+    void shouldRejectBookingAliasWhenIdIsNotNumeric(String method, String id) {
         final var requestsBefore = BACKEND_REQUEST_COUNT.get();
         try (final var client = newHttpClient()) {
             final var request = newBuilder(URI.create("http://127.0.0.1:" + applicationPort + "/api/v1/booking/" + id))
-                .GET().build();
+                .method(method, noBody()).build();
 
             final var response = client.send(request, ofString());
 
@@ -361,7 +382,8 @@ class GatewayRoutingTest {
                     return;
                 }
                 final var bookingStatus = exchange.getRequestHeaders().getFirst("X-Test-Booking-Status");
-                if (path.equals("/api/v1/bookings") && bookingStatus != null) {
+                final var bookingResponsePath = path.equals("/api/v1/bookings") || path.equals("/api/v1/bookings/42");
+                if (bookingResponsePath && bookingStatus != null) {
                     final var responseBody = "{\"id\":42}".getBytes(UTF_8);
                     exchange.getResponseHeaders().set("Content-Type", "application/json");
                     exchange.getResponseHeaders().set("Location", "/api/v1/bookings/42");

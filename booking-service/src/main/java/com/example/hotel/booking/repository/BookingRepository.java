@@ -44,4 +44,9 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
     @QueryHints(@QueryHint(name = "jakarta.persistence.lock.timeout", value = "2000"))
     @Query("select booking from Booking booking where booking.id = :id")
     Optional<Booking> findByIdForUpdate(long id);
+
+    @Lock(PESSIMISTIC_WRITE)
+    @QueryHints(@QueryHint(name = "jakarta.persistence.lock.timeout", value = "2000"))
+    @Query("select booking from Booking booking where booking.id = :id and booking.user.id = :userId")
+    Optional<Booking> findByIdAndUserIdForUpdate(long id, long userId);
 }

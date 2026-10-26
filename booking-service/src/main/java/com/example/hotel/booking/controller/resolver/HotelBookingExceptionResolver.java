@@ -1,5 +1,6 @@
 package com.example.hotel.booking.controller.resolver;
 
+import com.example.hotel.booking.service.exception.BookingCancellationException;
 import com.example.hotel.booking.service.exception.BookingCreationException;
 import com.example.hotel.booking.service.exception.BookingIdempotencyConflictException;
 import com.example.hotel.booking.service.exception.BookingNotFoundException;
@@ -31,10 +32,17 @@ import static org.springframework.http.HttpHeaders.WWW_AUTHENTICATE;
 import static org.springframework.http.HttpStatus.BAD_REQUEST;
 import static org.springframework.http.HttpStatus.CONFLICT;
 import static org.springframework.http.HttpStatus.NOT_FOUND;
+import static org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE;
 import static org.springframework.http.HttpStatus.UNAUTHORIZED;
 
 @RestControllerAdvice
 class HotelBookingExceptionResolver extends ResponseEntityExceptionHandler {
+
+    @ExceptionHandler(BookingCancellationException.class)
+    private static ResponseEntity<ProblemDetail> handleCancellationStorageFailure(BookingCancellationException exception) {
+        return ResponseEntity.status(SERVICE_UNAVAILABLE)
+            .body(getProblemDetails(SERVICE_UNAVAILABLE, "BOOKING_STORAGE_UNAVAILABLE", exception.getMessage()));
+    }
 
     @ExceptionHandler(BookingNotFoundException.class)
     private static ResponseEntity<ProblemDetail> handleMissingBooking(BookingNotFoundException exception) {

@@ -19,6 +19,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import static com.example.hotel.booking.domain.BookingReleaseReason.COMPENSATION;
+import static com.example.hotel.booking.domain.BookingReleaseReason.USER_CANCELLATION;
 import static com.example.hotel.booking.domain.BookingStatus.CANCELLED;
 import static com.example.hotel.booking.domain.BookingStatus.CONFIRMED;
 import static com.example.hotel.booking.domain.BookingStatus.PENDING;
@@ -108,13 +109,29 @@ public class Booking {
 
     public void cancelPending() {
         if (status == PENDING) {
-            status = CANCELLED;
-            releasePending = roomId != null;
-            releaseReason = COMPENSATION;
-            if (!releasePending) {
-                nextRecoveryAt = null;
-            }
+            cancel(COMPENSATION, nextRecoveryAt);
         }
+    }
+
+    public boolean cancelByUser(Instant recoveryAt) {
+        if (status == CANCELLED) {
+            return false;
+        }
+
+        final var reason = status == PENDING
+            ? COMPENSATION
+            : USER_CANCELLATION;
+        cancel(reason, recoveryAt);
+        return true;
+    }
+
+    private void cancel(BookingReleaseReason reason, Instant recoveryAt) {
+        status = CANCELLED;
+        releasePending = roomId != null;
+        releaseReason = reason;
+        nextRecoveryAt = releasePending
+            ? recoveryAt
+            : null;
     }
 
     public void completeRelease() {

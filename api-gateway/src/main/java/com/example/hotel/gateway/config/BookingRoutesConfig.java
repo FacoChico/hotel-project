@@ -19,6 +19,7 @@ class BookingRoutesConfig {
         return route("booking-compatibility")
             .POST("/api/v1/booking", http())
             .GET("/api/v1/booking/{id:[0-9]+}", http())
+            .DELETE("/api/v1/booking/{id:[0-9]+}", http())
             .before(BookingRoutesConfig::rewriteBookingAlias)
             .filter(lb("booking-service"))
             .build();

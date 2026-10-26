@@ -6,6 +6,7 @@ import com.example.hotel.booking.properties.HotelClientProperties;
 import com.example.hotel.booking.repository.BookingRepository;
 import com.example.hotel.booking.repository.UserRepository;
 import com.example.hotel.booking.service.exception.BookingIdempotencyConflictException;
+import com.example.hotel.booking.service.exception.BookingNotFoundException;
 import com.example.hotel.booking.service.exception.InvalidBookingRequestException;
 import com.example.hotel.booking.service.exception.UserNotFoundException;
 
@@ -113,6 +114,16 @@ public class BookingTransactions {
     }
 
     @Transactional
+    public Cancellation cancelBooking(long userId, long bookingId) {
+        final var booking = bookingRepository.findByIdAndUserIdForUpdate(bookingId, userId)
+            .orElseThrow(BookingNotFoundException::new);
+        final var deadline = clock.instant().truncatedTo(MICROS).plusMillis(properties.operationTimeoutMs());
+        final var transitioned = booking.cancelByUser(deadline);
+        logTransition(booking);
+        return new Cancellation(booking, transitioned);
+    }
+
+    @Transactional
     public Booking completeRelease(long bookingId) {
         final var booking = findLocked(bookingId);
         booking.completeRelease();
@@ -155,6 +166,12 @@ public class BookingTransactions {
     public record Acceptance(
         Booking booking,
         boolean created
+    ) {
+    }
+
+    public record Cancellation(
+        Booking booking,
+        boolean transitioned
     ) {
     }
 }
