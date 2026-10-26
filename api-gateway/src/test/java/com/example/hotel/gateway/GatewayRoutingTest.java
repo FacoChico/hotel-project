@@ -146,7 +146,13 @@ class GatewayRoutingTest {
         "PATCH, /api/v1/rooms/statistics",
         "DELETE, /api/v1/rooms/statistics",
         "GET, /api/v1/users/auth",
-        "GET, /api/v1/users/register"
+        "GET, /api/v1/users/register",
+        "GET, /api/v1/booking",
+        "DELETE, /api/v1/booking/7",
+        "PATCH, /api/v1/booking/7",
+        "POST, /api/v1/booking/7",
+        "POST, /api/v2/booking",
+        "GET, /api/v1/booking/7/release"
     })
     void shouldRejectRequestWhenRouteIsInternalOrUnlisted(String httpMethod, String requestPath) {
         try (var httpClient = newHttpClient()) {
@@ -249,6 +255,85 @@ class GatewayRoutingTest {
         }
     }
 
+    @ParameterizedTest
+    @CsvSource({
+        "POST, /api/v1/booking?trace=one, /api/v1/bookings",
+        "GET, /api/v1/booking/7?trace=one, /api/v1/bookings/7",
+        "GET, /api/v1/booking/0007?trace=one, /api/v1/bookings/0007"
+    })
+    @SneakyThrows
+    void shouldForwardBookingAliasWhenMethodAndPathMatch(String method, String path, String expectedPath) {
+        final var payload = method.equals("POST")
+            ? "{\"roomId\":42}"
+            : "";
+        try (final var client = newHttpClient()) {
+            final var request = newBuilder(URI.create("http://127.0.0.1:" + applicationPort + path))
+                .header("Authorization", "Bearer routing-test-marker")
+                .header("Content-Type", "application/json")
+                .method(method, ofString(payload))
+                .build();
+
+            final var response = client.send(request, ofString());
+
+            assertThat(response.statusCode()).isEqualTo(200);
+            assertThat(response.body()).isEqualTo("booking-service|" + method + "|" + expectedPath
+                + "|trace=one|Bearer routing-test-marker" + (payload.isEmpty()
+                ? ""
+                : "|" + payload));
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {201, 202})
+    @SneakyThrows
+    void shouldPreserveCreationResponseWhenBookingAliasIsUsed(int expectedStatus) {
+        try (final var client = newHttpClient()) {
+            final var request = newBuilder(URI.create("http://127.0.0.1:" + applicationPort + "/api/v1/booking"))
+                .header("X-Test-Booking-Status", Integer.toString(expectedStatus))
+                .POST(noBody())
+                .build();
+
+            final var response = client.send(request, ofString());
+
+            assertThat(response.statusCode()).isEqualTo(expectedStatus);
+            assertThat(response.headers().firstValue("Location").orElseThrow()).isEqualTo("/api/v1/bookings/42");
+            assertThat(response.body()).isEqualTo("{\"id\":42}");
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {401, 403, 404, 409})
+    @SneakyThrows
+    void shouldPreserveErrorWhenBackendRejectsBookingAlias(int expectedStatus) {
+        try (final var client = newHttpClient()) {
+            final var request = newBuilder(URI.create("http://127.0.0.1:" + applicationPort + "/api/v1/booking/" + expectedStatus))
+                .GET().build();
+
+            final var response = client.send(request, ofString());
+
+            assertThat(response.statusCode()).isEqualTo(expectedStatus);
+            assertThat(response.headers().firstValue("Content-Type").orElseThrow()).contains("application/problem+json");
+            assertThat(response.headers().firstValue("X-Test-Response").orElseThrow()).isEqualTo("preserved");
+            assertThat(response.body()).isEqualTo("{\"code\":\"BACKEND_ERROR\"}");
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"abc", "-1", "1.5"})
+    @SneakyThrows
+    void shouldRejectBookingAliasWhenIdIsNotNumeric(String id) {
+        final var requestsBefore = BACKEND_REQUEST_COUNT.get();
+        try (final var client = newHttpClient()) {
+            final var request = newBuilder(URI.create("http://127.0.0.1:" + applicationPort + "/api/v1/booking/" + id))
+                .GET().build();
+
+            final var response = client.send(request, ofString());
+
+            assertThat(response.statusCode()).isEqualTo(404);
+            assertThat(BACKEND_REQUEST_COUNT.get()).isEqualTo(requestsBefore);
+        }
+    }
+
     private static Stream<Arguments> nonnumericEntityPaths() {
         return Stream.of("hotels", "rooms", "users", "bookings")
             .flatMap(resource -> (resource.equals("bookings")
@@ -264,7 +349,7 @@ class GatewayRoutingTest {
             backendServer.createContext("/", exchange -> {
                 BACKEND_REQUEST_COUNT.incrementAndGet();
                 final var path = exchange.getRequestURI().getPath();
-                if (path.matches("/api/v1/users/(401|403|404|409)")) {
+                if (path.matches("/api/v1/(users|bookings)/(401|403|404|409)")) {
                     final var errorBody = "{\"code\":\"BACKEND_ERROR\"}".getBytes(UTF_8);
                     exchange.getResponseHeaders().set("Content-Type", "application/problem+json");
                     exchange.getResponseHeaders().set("X-Test-Response", "preserved");
@@ -272,6 +357,17 @@ class GatewayRoutingTest {
                     exchange.sendResponseHeaders(status, errorBody.length);
                     try (final var output = exchange.getResponseBody()) {
                         output.write(errorBody);
+                    }
+                    return;
+                }
+                final var bookingStatus = exchange.getRequestHeaders().getFirst("X-Test-Booking-Status");
+                if (path.equals("/api/v1/bookings") && bookingStatus != null) {
+                    final var responseBody = "{\"id\":42}".getBytes(UTF_8);
+                    exchange.getResponseHeaders().set("Content-Type", "application/json");
+                    exchange.getResponseHeaders().set("Location", "/api/v1/bookings/42");
+                    exchange.sendResponseHeaders(Integer.parseInt(bookingStatus), responseBody.length);
+                    try (final var output = exchange.getResponseBody()) {
+                        output.write(responseBody);
                     }
                     return;
                 }

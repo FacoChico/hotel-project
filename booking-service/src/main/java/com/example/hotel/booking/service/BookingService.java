@@ -1,17 +1,25 @@
 package com.example.hotel.booking.service;
 
+import com.example.hotel.booking.controller.dto.BookingPageResponse;
 import com.example.hotel.booking.controller.dto.BookingResponse;
 import com.example.hotel.booking.controller.dto.CreateBookingRequest;
 import com.example.hotel.booking.domain.Booking;
 import com.example.hotel.booking.gateway.HotelServiceGateway;
 import com.example.hotel.booking.gateway.exception.HotelServiceException;
+import com.example.hotel.booking.repository.BookingRepository;
 import com.example.hotel.booking.service.exception.BookingCreationException;
+import com.example.hotel.booking.service.exception.BookingNotFoundException;
 import com.example.hotel.booking.service.exception.UserNotFoundException;
 
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,6 +27,8 @@ import lombok.extern.slf4j.Slf4j;
 import static com.example.hotel.booking.domain.BookingStatus.CANCELLED;
 import static com.example.hotel.booking.domain.BookingStatus.CONFIRMED;
 import static java.util.Locale.ROOT;
+import static org.springframework.data.domain.Sort.Order.asc;
+import static org.springframework.data.domain.Sort.Order.desc;
 import static org.springframework.http.HttpStatus.CONFLICT;
 import static org.springframework.http.HttpStatus.GATEWAY_TIMEOUT;
 import static org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE;
@@ -29,6 +39,7 @@ import static org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE;
 public class BookingService {
     private final BookingTransactions transactions;
     private final HotelServiceGateway hotelServiceGateway;
+    private final BookingRepository bookingRepository;
 
     public BookingCreationResult createBooking(long userId, CreateBookingRequest request) {
         final var acceptance = accept(userId, request);
@@ -63,6 +74,27 @@ public class BookingService {
                 booking.getId(), booking.isReleasePending(), null);
         }
         return new BookingCreationResult(toResponse(booking), true);
+    }
+
+    @Transactional(readOnly = true)
+    public BookingPageResponse listBookings(long userId, int page, int size) {
+        final var totalElements = bookingRepository.countByUserId(userId);
+        final var pageable = PageRequest.of(page, size, Sort.by(desc("createdAt"), asc("id")));
+        if (pageable.getOffset() >= totalElements) {
+            return new BookingPageResponse(List.of(), page, size, totalElements);
+        }
+
+        final var bookings = bookingRepository.findAllByUserId(userId, pageable).stream()
+            .map(BookingService::toResponse)
+            .toList();
+        return new BookingPageResponse(bookings, page, size, totalElements);
+    }
+
+    @Transactional(readOnly = true)
+    public BookingResponse getBooking(long userId, long bookingId) {
+        final var booking = bookingRepository.findByIdAndUserId(bookingId, userId)
+            .orElseThrow(BookingNotFoundException::new);
+        return toResponse(booking);
     }
 
     private BookingTransactions.Acceptance accept(long userId, CreateBookingRequest request) {

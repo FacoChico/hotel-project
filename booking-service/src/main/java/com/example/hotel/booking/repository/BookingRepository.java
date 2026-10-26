@@ -22,6 +22,12 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
 
     Optional<Booking> findByUserIdAndRequestId(long userId, UUID requestId);
 
+    Optional<Booking> findByIdAndUserId(long id, long userId);
+
+    long countByUserId(long userId);
+
+    List<Booking> findAllByUserId(long userId, Pageable pageable);
+
     boolean existsByUserId(long userId);
 
     @Query("""

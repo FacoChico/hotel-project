@@ -44,7 +44,7 @@ class AdminBootstrapConfigTest {
         final var service = mock(AdminBootstrapService.class);
         final var password = randomUUID().toString();
         var runner = new ApplicationContextRunner()
-            .withUserConfiguration(AdminBootstrapConfig.class, PropertiesConfig.class)
+            .withUserConfiguration(AdminBootstrapConfig.class, TestPropertiesConfig.class)
             .withBean(AdminBootstrapService.class, () -> service)
             .withPropertyValues(
                 "security.bootstrap-admin.username=hotel_admin",

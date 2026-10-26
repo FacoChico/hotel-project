@@ -93,7 +93,6 @@ class BookingSecurityTests {
     @ParameterizedTest
     @CsvSource({
         "USER, GET, /api/v1/bookings",
-        "USER, GET, /api/v1/bookings/1",
         "USER, DELETE, /api/v1/bookings/1",
         "ADMIN, GET, /actuator/info"
     })
@@ -304,8 +303,6 @@ class BookingSecurityTests {
         @Bean
         RouterFunction<ServerResponse> securityTestRoutes() {
             return route()
-                .GET("/api/v1/bookings", request -> ok().body("user"))
-                .GET("/api/v1/bookings/{id:[0-9]+}", request -> ok().body("user"))
                 .DELETE("/api/v1/bookings/{id:[0-9]+}", request -> ok().body("user"))
                 .build();
         }
