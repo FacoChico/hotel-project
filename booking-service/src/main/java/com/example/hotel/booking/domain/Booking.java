@@ -100,6 +100,15 @@ public class Booking {
         this.nextRecoveryAt = deadlineAt;
     }
 
+    public boolean selectRoom(long selectedRoomId, Instant now) {
+        final var selectionIsActive = status == PENDING && deadlineAt.isAfter(now);
+        if (!selectionIsActive) {
+            return false;
+        }
+        roomId = selectedRoomId;
+        return true;
+    }
+
     public void confirm(Instant now) {
         if (status == PENDING && deadlineAt.isAfter(now)) {
             status = CONFIRMED;

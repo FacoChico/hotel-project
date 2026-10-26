@@ -39,7 +39,7 @@ class BookingController {
     @PostMapping
     ResponseEntity<BookingResponse> createBooking(@AuthenticationPrincipal Jwt jwt,
                                                   @Valid @RequestBody CreateBookingRequest request) {
-        final var result = bookingService.createBooking(Long.parseLong(jwt.getSubject()), request);
+        final var result = bookingService.createBooking(Long.parseLong(jwt.getSubject()), request, jwt.getTokenValue());
         final var booking = result.booking();
         final var status = result.created()
             ? CREATED

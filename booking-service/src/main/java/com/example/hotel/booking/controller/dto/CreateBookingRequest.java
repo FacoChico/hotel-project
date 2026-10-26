@@ -13,7 +13,7 @@ public record CreateBookingRequest(
     @NotNull UUID requestId,
     @NotNull Boolean autoSelect,
     @Positive Long hotelId,
-    @Positive Long roomId,
+    Long roomId,
     @NotNull @JsonDeserialize(converter = IsoDateConverter.class) LocalDate startDate,
     @NotNull @JsonDeserialize(converter = IsoDateConverter.class) LocalDate endDate
 ) {
