@@ -1,12 +1,15 @@
 package com.example.hotel.booking.config;
 
 import com.example.hotel.booking.properties.JwtProperties;
+import com.example.hotel.booking.properties.ServiceJwtProperties;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.boot.validation.autoconfigure.ValidationAutoConfiguration;
 import org.springframework.core.io.ByteArrayResource;
@@ -31,7 +34,7 @@ class JwtConfigTests {
     void shouldFailStartupWhenJwtSettingsAreMissing() {
         var contextRunner = new ApplicationContextRunner()
             .withConfiguration(AutoConfigurations.of(ValidationAutoConfiguration.class))
-            .withUserConfiguration(JwtConfig.class)
+            .withUserConfiguration(JwtConfig.class, TestPropertiesConfig.class)
             .withPropertyValues("security.service-jwt.audience=hotel-internal");
 
         contextRunner.run(context -> {
@@ -69,5 +72,10 @@ class JwtConfigTests {
         return arguments("weak RSA key",
             pem("PUBLIC KEY", keyPair.getPublic().getEncoded()),
             pem("PRIVATE KEY", keyPair.getPrivate().getEncoded()));
+    }
+
+    @TestConfiguration(proxyBeanMethods = false)
+    @EnableConfigurationProperties({JwtProperties.class, ServiceJwtProperties.class})
+    static class TestPropertiesConfig {
     }
 }

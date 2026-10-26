@@ -8,6 +8,8 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.DefaultApplicationArguments;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
 import lombok.SneakyThrows;
@@ -25,7 +27,7 @@ class AdminBootstrapConfigTest {
     void shouldSkipInitializationWhenBootstrapIsDisabled() {
         final var service = mock(AdminBootstrapService.class);
         final var runner = new ApplicationContextRunner()
-            .withUserConfiguration(AdminBootstrapConfig.class)
+            .withUserConfiguration(AdminBootstrapConfig.class, TestPropertiesConfig.class)
             .withBean(AdminBootstrapService.class, () -> service)
             .withPropertyValues("security.bootstrap-admin.enabled=false");
 
@@ -42,7 +44,7 @@ class AdminBootstrapConfigTest {
         final var service = mock(AdminBootstrapService.class);
         final var password = randomUUID().toString();
         var runner = new ApplicationContextRunner()
-            .withUserConfiguration(AdminBootstrapConfig.class)
+            .withUserConfiguration(AdminBootstrapConfig.class, PropertiesConfig.class)
             .withBean(AdminBootstrapService.class, () -> service)
             .withPropertyValues(
                 "security.bootstrap-admin.username=hotel_admin",
@@ -64,5 +66,10 @@ class AdminBootstrapConfigTest {
     @SneakyThrows
     private static void bootstrap(ApplicationRunner runner) {
         runner.run(new DefaultApplicationArguments());
+    }
+
+    @TestConfiguration(proxyBeanMethods = false)
+    @EnableConfigurationProperties(AdminBootstrapProperties.class)
+    static class TestPropertiesConfig {
     }
 }

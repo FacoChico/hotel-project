@@ -77,6 +77,9 @@ public class Booking {
     @Column(name = "release_reason", length = 32)
     private BookingReleaseReason releaseReason;
 
+    @Column(name = "next_recovery_at")
+    private Instant nextRecoveryAt;
+
     @Version
     @Column(nullable = false)
     private long version;
@@ -93,25 +96,50 @@ public class Booking {
         this.status = PENDING;
         this.createdAt = createdAt;
         this.deadlineAt = deadlineAt;
+        this.nextRecoveryAt = deadlineAt;
     }
 
     public void confirm(Instant now) {
         if (status == PENDING && deadlineAt.isAfter(now)) {
             status = CONFIRMED;
+            nextRecoveryAt = null;
         }
     }
 
     public void cancelPending() {
         if (status == PENDING) {
             status = CANCELLED;
-            releasePending = true;
+            releasePending = roomId != null;
             releaseReason = COMPENSATION;
+            if (!releasePending) {
+                nextRecoveryAt = null;
+            }
         }
     }
 
     public void completeRelease() {
         if (status == CANCELLED) {
             releasePending = false;
+            nextRecoveryAt = null;
         }
+    }
+
+    public boolean claimRecovery(Instant now, Instant retryAt) {
+        final var recoveryIsDue = nextRecoveryAt != null && !nextRecoveryAt.isAfter(now);
+        if (!recoveryIsDue) {
+            return false;
+        }
+
+        final var pendingIsExpired = status == PENDING && !deadlineAt.isAfter(now);
+        if (pendingIsExpired) {
+            cancelPending();
+        }
+
+        final var releaseIsRequired = status == CANCELLED && releasePending;
+        if (!releaseIsRequired) {
+            return false;
+        }
+        nextRecoveryAt = retryAt;
+        return true;
     }
 }

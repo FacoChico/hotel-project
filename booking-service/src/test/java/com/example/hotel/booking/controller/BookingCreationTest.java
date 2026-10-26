@@ -95,6 +95,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest(properties = {
     "eureka.client.enabled=false",
     "security.bootstrap-admin.enabled=false",
+    "booking.recovery.enabled=false",
     "spring.datasource.url=jdbc:h2:mem:booking_creation_test;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE",
     "booking.hotel-client.read-timeout-ms=500",
     "booking.hotel-client.backoff-ms=5",

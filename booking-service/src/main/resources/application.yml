@@ -23,6 +23,11 @@ spring:
   h2:
     console:
       enabled: false
+  task:
+    scheduling:
+      pool:
+        size: 1
+      thread-name-prefix: booking-recovery-
 
 eureka:
   client:
@@ -62,6 +67,12 @@ security:
     audience: ${SERVICE_JWT_AUDIENCE:hotel-internal}
 
 booking:
+  recovery:
+    enabled: ${BOOKING_RECOVERY_ENABLED:true}
+    batch-size: ${BOOKING_RECOVERY_BATCH_SIZE:20}
+    poll-interval-ms: ${BOOKING_RECOVERY_POLL_INTERVAL_MS:5000}
+    retry-delay-ms: ${BOOKING_RECOVERY_RETRY_DELAY_MS:5000}
+    cycle-timeout-ms: ${BOOKING_RECOVERY_CYCLE_TIMEOUT_MS:10000}
   hotel-client:
     connect-timeout-ms: ${HOTEL_CONNECT_TIMEOUT_MS:1000}
     read-timeout-ms: ${HOTEL_READ_TIMEOUT_MS:2000}
