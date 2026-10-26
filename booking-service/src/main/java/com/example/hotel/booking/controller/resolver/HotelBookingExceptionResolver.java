@@ -2,6 +2,7 @@ package com.example.hotel.booking.controller.resolver;
 
 import com.example.hotel.booking.service.exception.BookingCreationException;
 import com.example.hotel.booking.service.exception.BookingIdempotencyConflictException;
+import com.example.hotel.booking.service.exception.BookingNotFoundException;
 import com.example.hotel.booking.service.exception.EmptyUserUpdateException;
 import com.example.hotel.booking.service.exception.InvalidBookingRequestException;
 import com.example.hotel.booking.service.exception.UserHasBookingsException;
@@ -34,6 +35,12 @@ import static org.springframework.http.HttpStatus.UNAUTHORIZED;
 
 @RestControllerAdvice
 class HotelBookingExceptionResolver extends ResponseEntityExceptionHandler {
+
+    @ExceptionHandler(BookingNotFoundException.class)
+    private static ResponseEntity<ProblemDetail> handleMissingBooking(BookingNotFoundException exception) {
+        return ResponseEntity.status(NOT_FOUND)
+            .body(getProblemDetails(NOT_FOUND, "BOOKING_NOT_FOUND", exception.getMessage()));
+    }
 
     @ExceptionHandler(BookingCreationException.class)
     private static ResponseEntity<ProblemDetail> handleBookingFailure(BookingCreationException exception) {
