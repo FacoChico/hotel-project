@@ -3,6 +3,7 @@
 *.iml
 **/.gradle/
 **/build/
+__pycache__/
 .run/
 .env
 .env.*

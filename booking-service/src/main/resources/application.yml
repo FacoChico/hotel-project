@@ -79,3 +79,11 @@ booking:
     max-attempts: ${HOTEL_MAX_ATTEMPTS:3}
     backoff-ms: ${HOTEL_BACKOFF_MS:100}
     operation-timeout-ms: ${BOOKING_OPERATION_TIMEOUT_MS:10000}
+
+springdoc:
+  default-produces-media-type: application/json
+  paths-to-match: /api/v1/**
+  override-with-generic-response: false
+  swagger-ui:
+    disable-swagger-default-url: true
+    persist-authorization: false

@@ -1,0 +1,15 @@
+.git
+.idea
+.run
+.env*
+AGENTS.md
+local
+secrets
+**/.gradle
+**/build
+**/__pycache__
+**/*.log
+**/*.pem
+**/*.key
+**/*.p12
+**/*.jks

@@ -1,0 +1,129 @@
+x-service-environment: &service-environment
+  SERVER_ADDRESS: 0.0.0.0
+  EUREKA_URL: http://discovery-server:8761/eureka/
+
+x-tools: &tools
+  build:
+    context: .
+    dockerfile: docker/tools.Dockerfile
+  volumes:
+    - local-access:/run/local
+  environment:
+    DISCOVERY_PORT: ${DISCOVERY_PORT:-8761}
+    HOTEL_PORT: ${HOTEL_PORT:-8081}
+    BOOKING_PORT: ${BOOKING_PORT:-8082}
+    GATEWAY_PORT: ${GATEWAY_PORT:-8080}
+
+services:
+  setup:
+    <<: *tools
+    user: "0:0"
+    command: [init]
+    volumes:
+      - jwt-private:/data/private
+      - jwt-public:/data/public
+      - local-access:/run/local
+
+  discovery-server:
+    build:
+      context: .
+      args:
+        APPLICATION: discovery-server
+    environment:
+      <<: *service-environment
+      SERVER_PORT: 8761
+      SERVICE_HOSTNAME: discovery-server
+    ports:
+      - "127.0.0.1:${DISCOVERY_PORT:-8761}:8761"
+
+  hotel-service:
+    build:
+      context: .
+      args:
+        APPLICATION: hotel-service
+    environment:
+      <<: *service-environment
+      SERVER_PORT: 8081
+      SERVICE_HOSTNAME: hotel-service
+      JWT_PUBLIC_KEY: file:/run/public/jwt-public.pem
+    ports:
+      - "127.0.0.1:${HOTEL_PORT:-8081}:8081"
+    volumes:
+      - jwt-public:/run/public:ro
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+      discovery-server:
+        condition: service_healthy
+
+  booking-service:
+    build:
+      context: .
+      args:
+        APPLICATION: booking-service
+    environment:
+      <<: *service-environment
+      SERVER_PORT: 8082
+      SERVICE_HOSTNAME: booking-service
+      JWT_PUBLIC_KEY: file:/run/public/jwt-public.pem
+      JWT_PRIVATE_KEY: file:/run/private/jwt-private.pem
+      SPRING_CONFIG_IMPORT: configtree:/run/local/config/
+    ports:
+      - "127.0.0.1:${BOOKING_PORT:-8082}:8082"
+    volumes:
+      - jwt-private:/run/private:ro
+      - jwt-public:/run/public:ro
+      - local-access:/run/local:ro
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+      hotel-service:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+
+  api-gateway:
+    build:
+      context: .
+      args:
+        APPLICATION: api-gateway
+    environment:
+      <<: *service-environment
+      SERVER_PORT: 8080
+      SERVICE_HOSTNAME: api-gateway
+    ports:
+      - "127.0.0.1:${GATEWAY_PORT:-8080}:8080"
+    depends_on:
+      booking-service:
+        condition: service_healthy
+      hotel-service:
+        condition: service_healthy
+
+  access:
+    <<: *tools
+    command: [access]
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+
+  tools:
+    <<: *tools
+    profiles: [checks]
+    command: [check]
+    depends_on:
+      access:
+        condition: service_completed_successfully
+
+  tests:
+    profiles: [checks]
+    build:
+      context: .
+      dockerfile: docker/tests.Dockerfile
+    volumes:
+      - gradle-tests-cache:/cache/gradle
+
+volumes:
+  jwt-private:
+  jwt-public:
+  local-access:
+  gradle-tests-cache:

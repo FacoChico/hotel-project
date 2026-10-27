@@ -39,7 +39,8 @@ class SecurityConfig {
             .authorizeHttpRequests(access -> access
                 .dispatcherTypeMatchers(ERROR).permitAll()
                 .requestMatchers(POST, "/api/v1/users/register", "/api/v1/users/auth").permitAll()
-                .requestMatchers(GET, "/actuator/health").permitAll()
+                .requestMatchers(GET, "/actuator/health", "/v3/api-docs", "/v3/api-docs.yaml",
+                    "/v3/api-docs/swagger-config", "/swagger-ui.html", "/swagger-ui/**").permitAll()
                 .requestMatchers(GET, "/actuator/info").hasRole("ADMIN")
                 .requestMatchers(GET, "/api/v1/users", "/api/v1/users/{id}").hasRole("ADMIN")
                 .requestMatchers(POST, "/api/v1/users").hasRole("ADMIN")

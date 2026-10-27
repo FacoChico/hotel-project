@@ -6,9 +6,12 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 public record BookingResponse(
     long id,
     UUID requestId,
+    @Schema(nullable = true, description = "Null if no room has been selected")
     Long roomId,
     LocalDate startDate,
     LocalDate endDate,
