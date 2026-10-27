@@ -50,3 +50,11 @@ security:
     public-key: ${JWT_PUBLIC_KEY:}
   service-jwt:
     audience: ${SERVICE_JWT_AUDIENCE:hotel-internal}
+
+springdoc:
+  default-produces-media-type: application/json
+  paths-to-match: /api/v1/**
+  override-with-generic-response: false
+  swagger-ui:
+    disable-swagger-default-url: true
+    persist-authorization: false

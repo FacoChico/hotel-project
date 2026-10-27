@@ -19,6 +19,13 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.net.URI;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.headers.Header;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -30,14 +37,44 @@ import static org.springframework.http.HttpStatus.ACCEPTED;
 import static org.springframework.http.HttpStatus.CREATED;
 import static org.springframework.http.HttpStatus.OK;
 
+@Tag(name = "Bookings")
+@SecurityRequirement(name = "userBearer")
+@ApiResponses({
+    @ApiResponse(responseCode = "400", ref = "#/components/responses/InvalidRequest"),
+    @ApiResponse(responseCode = "401", ref = "#/components/responses/Unauthorized"),
+    @ApiResponse(responseCode = "403", ref = "#/components/responses/Forbidden")
+})
 @RestController
 @RequestMapping("/api/v1/bookings")
 @RequiredArgsConstructor
 class BookingController {
     private final BookingService bookingService;
 
+    @Operation(summary = "Create or repeat a booking",
+        description = """
+            Requires USER. requestId is unique per user. Repeating the same request returns the existing booking.
+            Automatic selection tries up to 20 rooms ordered by timesBooked, then ID.
+            """)
+    @ApiResponses({
+        @ApiResponse(responseCode = "201",
+            description = "Booking confirmed",
+            useReturnTypeSchema = true,
+            headers = @Header(name = "Location", ref = "#/components/headers/BookingLocation")),
+        @ApiResponse(responseCode = "200",
+            description = "Existing CONFIRMED or CANCELLED booking",
+            useReturnTypeSchema = true,
+            headers = @Header(name = "Location", ref = "#/components/headers/BookingLocation")),
+        @ApiResponse(responseCode = "202",
+            description = "Existing PENDING booking",
+            useReturnTypeSchema = true,
+            headers = @Header(name = "Location", ref = "#/components/headers/BookingLocation")),
+        @ApiResponse(responseCode = "404", ref = "#/components/responses/BookingTargetNotFound"),
+        @ApiResponse(responseCode = "409", ref = "#/components/responses/BookingCreationConflict"),
+        @ApiResponse(responseCode = "503", ref = "#/components/responses/BookingCreationUnavailable"),
+        @ApiResponse(responseCode = "504", ref = "#/components/responses/BookingTimeout")
+    })
     @PostMapping
-    ResponseEntity<BookingResponse> createBooking(@AuthenticationPrincipal Jwt jwt,
+    ResponseEntity<BookingResponse> createBooking(@Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt,
                                                   @Valid @RequestBody CreateBookingRequest request) {
         final var result = bookingService.createBooking(Long.parseLong(jwt.getSubject()), request, jwt.getTokenValue());
         final var booking = result.booking();
@@ -51,20 +88,47 @@ class BookingController {
             .body(booking);
     }
 
+    @Operation(summary = "List personal bookings",
+        description = "Requires USER. Returns the user's bookings in all statuses, ordered by createdAt descending and ID ascending.")
+    @ApiResponse(responseCode = "200", useReturnTypeSchema = true)
     @GetMapping
-    private BookingPageResponse listBookings(@AuthenticationPrincipal Jwt jwt,
+    private BookingPageResponse listBookings(@Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt,
                                              @RequestParam(defaultValue = "0") @Min(0) int page,
                                              @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
         return bookingService.listBookings(Long.parseLong(jwt.getSubject()), page, size);
     }
 
+    @Operation(summary = "Get a personal booking",
+        description = "Requires USER. Missing bookings and bookings owned by another user return 404.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", useReturnTypeSchema = true),
+        @ApiResponse(responseCode = "404", ref = "#/components/responses/BookingNotFound")
+    })
     @GetMapping("/{id:[0-9]+}")
-    private BookingResponse getBooking(@AuthenticationPrincipal Jwt jwt, @PathVariable @Positive long id) {
+    private BookingResponse getBooking(@Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt, @PathVariable @Positive long id) {
         return bookingService.getBooking(Long.parseLong(jwt.getSubject()), id);
     }
 
+    @Operation(summary = "Cancel a personal booking",
+        description = """
+            Requires USER. The cancelled booking remains in the user's history.
+            Repeated cancellation returns the current state. releasePending indicates whether room release is pending.
+            """)
+    @ApiResponses({
+        @ApiResponse(responseCode = "200",
+            description = "CANCELLED with releasePending=false",
+            useReturnTypeSchema = true,
+            headers = @Header(name = "Location", ref = "#/components/headers/BookingLocation")),
+        @ApiResponse(responseCode = "202",
+            description = "CANCELLED with releasePending=true",
+            useReturnTypeSchema = true,
+            headers = @Header(name = "Location", ref = "#/components/headers/BookingLocation")),
+        @ApiResponse(responseCode = "404", ref = "#/components/responses/BookingNotFound"),
+        @ApiResponse(responseCode = "503", ref = "#/components/responses/BookingCancellationUnavailable")
+    })
     @DeleteMapping("/{id:[0-9]+}")
-    private ResponseEntity<BookingResponse> cancelBooking(@AuthenticationPrincipal Jwt jwt, @PathVariable @Positive long id) {
+    private ResponseEntity<BookingResponse> cancelBooking(@Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt,
+                                                          @PathVariable @Positive long id) {
         final var booking = bookingService.cancelBooking(Long.parseLong(jwt.getSubject()), id);
         final var status = booking.releasePending()
             ? ACCEPTED
