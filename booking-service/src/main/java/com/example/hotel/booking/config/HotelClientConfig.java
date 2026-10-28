@@ -2,6 +2,7 @@ package com.example.hotel.booking.config;
 
 import com.example.hotel.booking.properties.HotelClientProperties;
 
+import org.springframework.boot.restclient.autoconfigure.RestClientBuilderConfigurer;
 import org.springframework.cloud.client.loadbalancer.LoadBalanced;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -26,8 +27,8 @@ class HotelClientConfig {
 
     @Bean
     @LoadBalanced
-    private static RestClient.Builder hotelRestClientBuilder(JsonMapper mapper) {
-        return RestClient.builder()
+    private static RestClient.Builder hotelRestClientBuilder(JsonMapper mapper, RestClientBuilderConfigurer configurer) {
+        return configurer.configure(RestClient.builder())
             .baseUrl("http://hotel-service")
             .configureMessageConverters(converters -> converters
                 .withJsonConverter(new JacksonJsonHttpMessageConverter(mapper)));

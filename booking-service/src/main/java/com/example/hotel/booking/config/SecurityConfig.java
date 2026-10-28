@@ -4,6 +4,7 @@ import com.example.hotel.booking.security.SecurityExceptionHandler;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
@@ -17,16 +18,17 @@ import static org.springframework.http.HttpMethod.PATCH;
 import static org.springframework.http.HttpMethod.POST;
 import static org.springframework.security.config.http.SessionCreationPolicy.STATELESS;
 
+@EnableMethodSecurity
 @Configuration(proxyBeanMethods = false)
 class SecurityConfig {
 
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http, SecurityExceptionHandler problemHandler) {
-        var authorities = new JwtGrantedAuthoritiesConverter();
+        final var authorities = new JwtGrantedAuthoritiesConverter();
         authorities.setAuthoritiesClaimName("roles");
         authorities.setAuthorityPrefix("ROLE_");
 
-        var authentication = new JwtAuthenticationConverter();
+        final var authentication = new JwtAuthenticationConverter();
         authentication.setJwtGrantedAuthoritiesConverter(authorities);
 
         return http
@@ -46,7 +48,7 @@ class SecurityConfig {
                 .requestMatchers(POST, "/api/v1/users").hasRole("ADMIN")
                 .requestMatchers(PATCH, "/api/v1/users/{id}").hasRole("ADMIN")
                 .requestMatchers(DELETE, "/api/v1/users/{id}").hasRole("ADMIN")
-                .requestMatchers(GET, "/api/v1/bookings", "/api/v1/bookings/{id}").hasRole("USER")
+                .requestMatchers(GET, "/api/v1/bookings", "/api/v1/bookings/{id}", "/api/v1/bookings/recommendations").hasRole("USER")
                 .requestMatchers(POST, "/api/v1/bookings").hasRole("USER")
                 .requestMatchers(DELETE, "/api/v1/bookings/{id}").hasRole("USER")
                 .anyRequest().denyAll())

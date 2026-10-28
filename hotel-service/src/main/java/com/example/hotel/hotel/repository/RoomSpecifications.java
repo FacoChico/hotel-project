@@ -6,6 +6,7 @@ import com.example.hotel.hotel.domain.RoomReservation;
 import org.springframework.data.jpa.domain.Specification;
 
 import java.time.LocalDate;
+import java.util.List;
 
 import lombok.experimental.UtilityClass;
 
@@ -13,6 +14,12 @@ import static com.example.hotel.hotel.domain.RoomReservationState.RESERVED;
 
 @UtilityClass
 public class RoomSpecifications {
+
+    public static Specification<Room> excludingRooms(List<Long> roomIds) {
+        return (room, query, builder) -> roomIds.isEmpty()
+            ? builder.conjunction()
+            : builder.not(room.get("id").in(roomIds));
+    }
 
     public static Specification<Room> availableForDates(LocalDate startDate, LocalDate endDate, Long hotelId) {
         return (room, query, builder) -> {

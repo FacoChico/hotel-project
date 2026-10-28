@@ -55,6 +55,11 @@ spring:
               predicates:
                 - Path=/api/v1/bookings
                 - Method=GET,POST
+            - id: booking-recommendations
+              uri: lb://booking-service
+              predicates:
+                - Path=/api/v1/bookings/recommendations
+                - Method=GET
             - id: booking-item
               uri: lb://booking-service
               predicates:
@@ -69,6 +74,14 @@ eureka:
     hostname: ${SERVICE_HOSTNAME:localhost}
 
 management:
+  tracing:
+    export:
+      otlp:
+        enabled: false
+    sampling:
+      probability: 1.0
+    propagation:
+      type: w3c
   endpoints:
     web:
       exposure:
@@ -83,3 +96,14 @@ management:
 info:
   application:
     name: ${spring.application.name}
+
+logging:
+  structured:
+    format:
+      console: logstash
+
+security:
+  jwt:
+    public-key: ${JWT_PUBLIC_KEY:}
+    issuer: ${JWT_ISSUER:hotel-booking}
+    audience: ${JWT_AUDIENCE:hotel-api}

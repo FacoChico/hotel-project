@@ -28,7 +28,7 @@ import static org.springframework.boot.test.context.SpringBootTest.WebEnvironmen
         "security.bootstrap-admin.enabled=false"
     }
 )
-class BookingServiceApplicationTests {
+class BookingServiceApplicationTest {
     @LocalServerPort
     private int applicationPort;
 
@@ -44,9 +44,9 @@ class BookingServiceApplicationTests {
     @SneakyThrows
     void shouldReportUpWhenHealthEndpointIsRequested() {
         try (var httpClient = newHttpClient()) {
-            var healthRequest = newBuilder(URI.create("http://127.0.0.1:" + applicationPort + "/actuator/health")).build();
+            final var healthRequest = newBuilder(URI.create("http://127.0.0.1:" + applicationPort + "/actuator/health")).build();
 
-            var healthResponse = httpClient.send(healthRequest, ofString());
+            final var healthResponse = httpClient.send(healthRequest, ofString());
 
             assertThat(healthResponse.statusCode()).isEqualTo(200);
             assertThat(healthResponse.body()).contains("\"status\":\"UP\"");
@@ -56,11 +56,11 @@ class BookingServiceApplicationTests {
     @Test
     @SneakyThrows
     void shouldConnectToDb() {
-        var expectedDatabaseUrl = "jdbc:h2:mem:booking_service";
+        final var expectedDatabaseUrl = "jdbc:h2:mem:booking_service";
 
         try (var connection = dataSource.getConnection()) {
-            var databaseUrl = connection.getMetaData().getURL();
-            var connectionIsValid = connection.isValid(1);
+            final var databaseUrl = connection.getMetaData().getURL();
+            final var connectionIsValid = connection.isValid(1);
 
             assertThat(databaseUrl).isEqualTo(expectedDatabaseUrl);
             assertThat(connectionIsValid).isTrue();

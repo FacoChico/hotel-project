@@ -42,37 +42,37 @@ public final class JwtTestKeys {
 
     @SneakyThrows
     public static KeyPair generateKeyPair(int bits) {
-        var generator = KeyPairGenerator.getInstance("RSA");
+        final var generator = KeyPairGenerator.getInstance("RSA");
         generator.initialize(bits);
         return generator.generateKeyPair();
     }
 
     public static byte[] pem(String label, byte[] encoded) {
-        var body = Base64.getMimeEncoder(64, new byte[]{'\n'}).encodeToString(encoded);
+        final var body = Base64.getMimeEncoder(64, new byte[]{'\n'}).encodeToString(encoded);
         return ("-----BEGIN " + label + "-----\n" + body + "\n-----END " + label + "-----\n")
             .getBytes(US_ASCII);
     }
 
     @SneakyThrows
     public static String sign(Map<String, Object> claims, KeyPair keyPair, JWSAlgorithm algorithm) {
-        var builder = new JWTClaimsSet.Builder();
+        final var builder = new JWTClaimsSet.Builder();
         claims.forEach(builder::claim);
-        var jwt = new SignedJWT(new JWSHeader(algorithm), builder.build());
+        final var jwt = new SignedJWT(new JWSHeader(algorithm), builder.build());
         jwt.sign(new RSASSASigner((RSAPrivateKey) keyPair.getPrivate()));
         return jwt.serialize();
     }
 
     @SneakyThrows
     private static Path createKeyDirectory() {
-        var parent = Files.createDirectories(Path.of("build", "tmp"));
-        var directory = Files.createTempDirectory(parent, "jwt-test-");
+        final var parent = Files.createDirectories(Path.of("build", "tmp"));
+        final var directory = Files.createTempDirectory(parent, "jwt-test-");
         directory.toFile().deleteOnExit();
         return directory;
     }
 
     @SneakyThrows
     private static Path writeKey(String name, byte[] content) {
-        var path = Files.write(KEY_DIRECTORY.resolve(name), content);
+        final var path = Files.write(KEY_DIRECTORY.resolve(name), content);
         path.toFile().deleteOnExit();
         return path;
     }

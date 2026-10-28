@@ -22,6 +22,7 @@ import java.util.Map;
 import java.util.stream.Stream;
 
 import lombok.SneakyThrows;
+
 import tools.jackson.databind.json.JsonMapper;
 
 import static com.example.hotel.booking.domain.UserRole.ADMIN;
@@ -43,7 +44,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
     "security.bootstrap-admin.username=hotel_admin"
 })
 @AutoConfigureMockMvc(print = NONE)
-class AdminBootstrapServiceTests {
+class AdminBootstrapServiceTest {
     private static final String BOOTSTRAP_PASSWORD = randomUUID().toString();
 
     @Autowired

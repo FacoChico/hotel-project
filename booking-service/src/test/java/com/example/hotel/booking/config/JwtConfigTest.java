@@ -28,11 +28,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
-class JwtConfigTests {
+class JwtConfigTest {
 
     @Test
     void shouldFailStartupWhenJwtSettingsAreMissing() {
-        var contextRunner = new ApplicationContextRunner()
+        final var contextRunner = new ApplicationContextRunner()
             .withConfiguration(AutoConfigurations.of(ValidationAutoConfiguration.class))
             .withUserConfiguration(JwtConfig.class, TestPropertiesConfig.class)
             .withPropertyValues("security.service-jwt.audience=hotel-internal");
@@ -46,11 +46,11 @@ class JwtConfigTests {
     @ParameterizedTest(name = "{0}")
     @MethodSource("invalidKeyPairs")
     void shouldRejectKeysWhenConfigurationIsInvalid(String scenario, byte[] publicKey, byte[] privateKey) {
-        var properties = new JwtProperties(ISSUER, AUDIENCE,
+        final var properties = new JwtProperties(ISSUER, AUDIENCE,
             new ByteArrayResource(publicKey), new ByteArrayResource(privateKey));
-        var configuration = new JwtConfig();
+        final var configuration = new JwtConfig();
 
-        var exception = catchThrowable(() -> configuration.jwtKeyPair(properties));
+        final var exception = catchThrowable(() -> configuration.jwtKeyPair(properties));
 
         assertThat(exception)
             .isInstanceOf(IllegalStateException.class)
@@ -58,9 +58,9 @@ class JwtConfigTests {
     }
 
     static Stream<Arguments> invalidKeyPairs() {
-        var publicPem = pem("PUBLIC KEY", KEY_PAIR.getPublic().getEncoded());
-        var privatePem = pem("PRIVATE KEY", KEY_PAIR.getPrivate().getEncoded());
-        var weakKeyPair = generateKeyPair(1024);
+        final var publicPem = pem("PUBLIC KEY", KEY_PAIR.getPublic().getEncoded());
+        final var privatePem = pem("PRIVATE KEY", KEY_PAIR.getPrivate().getEncoded());
+        final var weakKeyPair = generateKeyPair(1024);
         return Stream.of(
             arguments("malformed public key", "invalid PEM".getBytes(US_ASCII), privatePem),
             arguments("malformed private key", publicPem, "invalid PEM".getBytes(US_ASCII)),

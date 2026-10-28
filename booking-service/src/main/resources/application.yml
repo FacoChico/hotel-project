@@ -37,6 +37,14 @@ eureka:
     hostname: ${SERVICE_HOSTNAME:localhost}
 
 management:
+  tracing:
+    export:
+      otlp:
+        enabled: false
+    sampling:
+      probability: 1.0
+    propagation:
+      type: w3c
   endpoints:
     web:
       exposure:
@@ -67,6 +75,12 @@ security:
     audience: ${SERVICE_JWT_AUDIENCE:hotel-internal}
 
 booking:
+  hotel-circuit-breaker:
+    window-size: ${HOTEL_CIRCUIT_WINDOW_SIZE:20}
+    minimum-calls: ${HOTEL_CIRCUIT_MINIMUM_CALLS:10}
+    failure-rate-threshold: ${HOTEL_CIRCUIT_FAILURE_RATE:50}
+    open-duration-ms: ${HOTEL_CIRCUIT_OPEN_DURATION_MS:10000}
+    half-open-calls: ${HOTEL_CIRCUIT_HALF_OPEN_CALLS:3}
   recovery:
     enabled: ${BOOKING_RECOVERY_ENABLED:true}
     batch-size: ${BOOKING_RECOVERY_BATCH_SIZE:20}
@@ -87,3 +101,8 @@ springdoc:
   swagger-ui:
     disable-swagger-default-url: true
     persist-authorization: false
+
+logging:
+  structured:
+    format:
+      console: logstash

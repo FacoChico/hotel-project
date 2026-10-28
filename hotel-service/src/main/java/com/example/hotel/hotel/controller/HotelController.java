@@ -6,6 +6,7 @@ import com.example.hotel.hotel.controller.dto.HotelResponse;
 import com.example.hotel.hotel.controller.dto.UpdateHotelRequest;
 import com.example.hotel.hotel.service.HotelService;
 
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -17,17 +18,19 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Positive;
+
+import lombok.RequiredArgsConstructor;
+
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.validation.Valid;
-import jakarta.validation.constraints.Max;
-import jakarta.validation.constraints.Min;
-import jakarta.validation.constraints.Positive;
-import lombok.RequiredArgsConstructor;
 
 import static org.springframework.http.HttpStatus.CREATED;
 import static org.springframework.http.HttpStatus.NO_CONTENT;
@@ -39,6 +42,7 @@ import static org.springframework.http.HttpStatus.NO_CONTENT;
     @ApiResponse(responseCode = "401", ref = "#/components/responses/Unauthorized"),
     @ApiResponse(responseCode = "403", ref = "#/components/responses/Forbidden")
 })
+@PreAuthorize("hasRole('ADMIN')")
 @RestController
 @RequestMapping("/api/v1/hotels")
 @RequiredArgsConstructor
@@ -50,16 +54,17 @@ class HotelController {
     @ApiResponse(responseCode = "201", useReturnTypeSchema = true)
     @PostMapping
     @ResponseStatus(CREATED)
-    private HotelResponse createHotel(@Valid @RequestBody CreateHotelRequest request) {
+    public HotelResponse createHotel(@Valid @RequestBody CreateHotelRequest request) {
         return hotelService.createHotel(request);
     }
 
     @Operation(summary = "List hotels",
         description = "Requires USER or ADMIN. Ordered by ID ascending.")
     @ApiResponse(responseCode = "200", useReturnTypeSchema = true)
+    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
     @GetMapping
-    private HotelPageResponse listHotels(@RequestParam(defaultValue = "0") @Min(0) int page,
-                                         @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
+    public HotelPageResponse listHotels(@RequestParam(defaultValue = "0") @Min(0) int page,
+                                        @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
         return hotelService.listHotels(page, size);
     }
 
@@ -69,8 +74,9 @@ class HotelController {
         @ApiResponse(responseCode = "200", useReturnTypeSchema = true),
         @ApiResponse(responseCode = "404", ref = "#/components/responses/HotelNotFound")
     })
+    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
     @GetMapping("/{id:[0-9]+}")
-    private HotelResponse getHotel(@PathVariable @Positive long id) {
+    public HotelResponse getHotel(@PathVariable @Positive long id) {
         return hotelService.getHotel(id);
     }
 
@@ -84,8 +90,8 @@ class HotelController {
         @ApiResponse(responseCode = "404", ref = "#/components/responses/HotelNotFound")
     })
     @PatchMapping("/{id:[0-9]+}")
-    private HotelResponse updateHotel(@PathVariable @Positive long id,
-                                      @Valid @RequestBody UpdateHotelRequest request) {
+    public HotelResponse updateHotel(@PathVariable @Positive long id,
+                                     @Valid @RequestBody UpdateHotelRequest request) {
         return hotelService.updateHotel(id, request);
     }
 
@@ -98,7 +104,7 @@ class HotelController {
     })
     @DeleteMapping("/{id:[0-9]+}")
     @ResponseStatus(NO_CONTENT)
-    private void deleteHotel(@PathVariable @Positive long id) {
+    public void deleteHotel(@PathVariable @Positive long id) {
         hotelService.deleteHotel(id);
     }
 }

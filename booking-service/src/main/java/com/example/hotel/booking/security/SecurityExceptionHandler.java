@@ -13,8 +13,10 @@ import java.net.URI;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+
 import tools.jackson.databind.json.JsonMapper;
 
 import static org.springframework.http.HttpHeaders.WWW_AUTHENTICATE;
@@ -46,7 +48,7 @@ public class SecurityExceptionHandler implements AuthenticationEntryPoint, Acces
                                        HttpServletResponse response,
                                        HttpStatus status,
                                        String detail) throws IOException {
-        var problem = ProblemDetail.forStatusAndDetail(status, detail);
+        final var problem = ProblemDetail.forStatusAndDetail(status, detail);
         problem.setInstance(URI.create(request.getRequestURI()));
         problem.setProperty("code", status.name());
 

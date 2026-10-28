@@ -1,13 +1,13 @@
 package com.example.hotel.booking.controller;
 
+import com.example.hotel.booking.controller.dto.CredentialsRequest;
+import com.example.hotel.booking.controller.dto.TokenResponse;
 import com.example.hotel.booking.domain.User;
 import com.example.hotel.booking.domain.UserRole;
 import com.example.hotel.booking.repository.UserRepository;
 import com.example.hotel.booking.security.JwtTokenService;
 import com.example.hotel.booking.service.UserAuthenticationService;
 import com.example.hotel.booking.testutil.JwtTestKeys;
-import com.example.hotel.booking.controller.dto.CredentialsRequest;
-import com.example.hotel.booking.controller.dto.TokenResponse;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -35,6 +35,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.stream.Stream;
 
 import lombok.SneakyThrows;
+
 import tools.jackson.databind.json.JsonMapper;
 
 import static com.example.hotel.booking.domain.UserRole.USER;
@@ -65,7 +66,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
     "spring.datasource.url=jdbc:h2:mem:authentication_tests;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE"
 })
 @AutoConfigureMockMvc(print = NONE)
-class UserAuthenticationTests {
+class UserAuthenticationTest {
     @Autowired
     private MockMvc mockMvc;
     @Autowired
@@ -95,12 +96,12 @@ class UserAuthenticationTests {
     @MethodSource("validCredentials")
     @SneakyThrows
     void shouldRegisterUserWhenCredentialsAreValid(String scenario, String username, String password) {
-        var request = credentialsRequest("/api/v1/users/register", username, password);
+        final var request = credentialsRequest("/api/v1/users/register", username, password);
 
-        var result = mockMvc.perform(request).andReturn();
-        var body = mapper.readTree(result.getResponse().getContentAsString());
-        var user = userRepository.findByUsername(username).orElseThrow();
-        var token = jwtDecoder.decode(body.get("token").get("accessToken").stringValue());
+        final var result = mockMvc.perform(request).andReturn();
+        final var body = mapper.readTree(result.getResponse().getContentAsString());
+        final var user = userRepository.findByUsername(username).orElseThrow();
+        final var token = jwtDecoder.decode(body.get("token").get("accessToken").stringValue());
 
         assertThat(result.getResponse().getStatus()).isEqualTo(201);
         assertThat(body.get("user").get("id").longValue()).isEqualTo(user.getId());
@@ -124,13 +125,13 @@ class UserAuthenticationTests {
     @EnumSource(UserRole.class)
     @SneakyThrows
     void shouldAuthenticateUserWhenPasswordMatches(UserRole role) {
-        var password = randomUUID().toString();
-        var user = userRepository.saveAndFlush(new User("hotel_guest", passwordEncoder.encode(password), role));
-        var request = credentialsRequest("/api/v1/users/auth", user.getUsername(), password);
+        final var password = randomUUID().toString();
+        final var user = userRepository.saveAndFlush(new User("hotel_guest", passwordEncoder.encode(password), role));
+        final var request = credentialsRequest("/api/v1/users/auth", user.getUsername(), password);
 
-        var result = mockMvc.perform(request).andReturn();
-        var body = mapper.readValue(result.getResponse().getContentAsString(), TokenResponse.class);
-        var token = jwtDecoder.decode(body.accessToken());
+        final var result = mockMvc.perform(request).andReturn();
+        final var body = mapper.readValue(result.getResponse().getContentAsString(), TokenResponse.class);
+        final var token = jwtDecoder.decode(body.accessToken());
 
         assertThat(result.getResponse().getStatus()).isEqualTo(200);
         assertThat(token.getSubject()).isEqualTo(user.getId().toString());
@@ -145,13 +146,13 @@ class UserAuthenticationTests {
     @Test
     @SneakyThrows
     void shouldAuthenticateRegisteredUserWhenRegistrationHasCompleted() {
-        var password = randomUUID().toString();
+        final var password = randomUUID().toString();
         mockMvc.perform(credentialsRequest("/api/v1/users/register", "hotel_guest", password))
             .andExpect(status().isCreated());
 
-        var result = mockMvc.perform(credentialsRequest("/api/v1/users/auth", "hotel_guest", password))
+        final var result = mockMvc.perform(credentialsRequest("/api/v1/users/auth", "hotel_guest", password))
             .andExpect(status().isOk()).andReturn();
-        var token = mapper.readTree(result.getResponse().getContentAsString()).get("accessToken").stringValue();
+        final var token = mapper.readTree(result.getResponse().getContentAsString()).get("accessToken").stringValue();
 
         mockMvc.perform(get("/api/v1/users").header(AUTHORIZATION, "Bearer " + token))
             .andExpect(status().isForbidden());
@@ -160,11 +161,11 @@ class UserAuthenticationTests {
     @Test
     @SneakyThrows
     void shouldReturnSameErrorWhenUsernameOrPasswordIsIncorrect() {
-        var password = randomUUID().toString();
+        final var password = randomUUID().toString();
         userRepository.saveAndFlush(new User("hotel_guest", passwordEncoder.encode(password), USER));
 
-        var unknownUser = mockMvc.perform(credentialsRequest("/api/v1/users/auth", "unknown_guest", password));
-        var wrongPassword = mockMvc.perform(credentialsRequest("/api/v1/users/auth", "hotel_guest", randomUUID().toString()));
+        final var unknownUser = mockMvc.perform(credentialsRequest("/api/v1/users/auth", "unknown_guest", password));
+        final var wrongPassword = mockMvc.perform(credentialsRequest("/api/v1/users/auth", "hotel_guest", randomUUID().toString()));
 
         for (var response : List.of(unknownUser, wrongPassword)) {
             response.andExpect(status().isUnauthorized())
@@ -180,13 +181,13 @@ class UserAuthenticationTests {
     @MethodSource("invalidCredentials")
     @SneakyThrows
     void shouldRejectRequestWhenCredentialsAreInvalid(String path, String scenario, Object username, Object password) {
-        var request = credentialsRequest(path, username, password);
+        final var request = credentialsRequest(path, username, password);
 
-        var result = mockMvc.perform(request)
+        final var result = mockMvc.perform(request)
             .andExpect(status().isBadRequest())
             .andExpect(content().contentTypeCompatibleWith(APPLICATION_PROBLEM_JSON))
             .andReturn();
-        var body = mapper.readTree(result.getResponse().getContentAsString());
+        final var body = mapper.readTree(result.getResponse().getContentAsString());
 
         assertThat(body.has("code")).isTrue();
         assertThat(body.has("stackTrace")).isFalse();
@@ -198,13 +199,13 @@ class UserAuthenticationTests {
     @MethodSource("unknownFields")
     @SneakyThrows
     void shouldRejectRequestWhenJsonContainsUnknownField(String path, String field) {
-        var password = randomUUID().toString();
-        var payload = new LinkedHashMap<String, Object>();
+        final var password = randomUUID().toString();
+        final var payload = new LinkedHashMap<String, Object>();
         payload.put("username", "hotel_guest");
         payload.put("password", password);
         payload.put(field, "ADMIN");
 
-        var result = mockMvc.perform(post(path).contentType(APPLICATION_JSON).content(mapper.writeValueAsBytes(payload)));
+        final var result = mockMvc.perform(post(path).contentType(APPLICATION_JSON).content(mapper.writeValueAsBytes(payload)));
 
         result.andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.code").value("INVALID_REQUEST_BODY"));
@@ -214,11 +215,11 @@ class UserAuthenticationTests {
     @Test
     @SneakyThrows
     void shouldOmitRejectedValuesWhenPasswordValidationFails() {
-        var rejectedPassword = randomUUID().toString().repeat(3);
-        var request = credentialsRequest("/api/v1/users/register", "hotel_guest", rejectedPassword);
+        final var rejectedPassword = randomUUID().toString().repeat(3);
+        final var request = credentialsRequest("/api/v1/users/register", "hotel_guest", rejectedPassword);
 
-        var result = mockMvc.perform(request).andReturn();
-        var body = mapper.readTree(result.getResponse().getContentAsString());
+        final var result = mockMvc.perform(request).andReturn();
+        final var body = mapper.readTree(result.getResponse().getContentAsString());
 
         assertThat(result.getResponse().getStatus()).isEqualTo(400);
         assertThat(body.get("code").stringValue()).isEqualTo("VALIDATION_FAILED");
@@ -230,10 +231,10 @@ class UserAuthenticationTests {
     @Test
     @SneakyThrows
     void shouldReturnConflictWhenUsernameAlreadyExists() {
-        var password = randomUUID().toString();
-        var user = userRepository.saveAndFlush(new User("hotel_guest", passwordEncoder.encode(password), USER));
+        final var password = randomUUID().toString();
+        final var user = userRepository.saveAndFlush(new User("hotel_guest", passwordEncoder.encode(password), USER));
 
-        var result = mockMvc.perform(credentialsRequest("/api/v1/users/register", "hotel_guest", randomUUID().toString()));
+        final var result = mockMvc.perform(credentialsRequest("/api/v1/users/register", "hotel_guest", randomUUID().toString()));
 
         result.andExpect(status().isConflict())
             .andExpect(jsonPath("$.code").value("USERNAME_ALREADY_EXISTS"));
@@ -244,8 +245,8 @@ class UserAuthenticationTests {
     @Test
     @SneakyThrows
     void shouldPersistOneUserWhenRegistrationsAreConcurrent() {
-        var password = randomUUID().toString();
-        var start = new CountDownLatch(1);
+        final var password = randomUUID().toString();
+        final var start = new CountDownLatch(1);
         Callable<Integer> registration = () -> {
             start.await();
             return mockMvc.perform(credentialsRequest("/api/v1/users/register", "hotel_guest", password))
@@ -253,10 +254,10 @@ class UserAuthenticationTests {
         };
 
         try (var executor = newFixedThreadPool(2)) {
-            var first = executor.submit(registration);
-            var second = executor.submit(registration);
+            final var first = executor.submit(registration);
+            final var second = executor.submit(registration);
             start.countDown();
-            var statuses = List.of(first.get(10, SECONDS), second.get(10, SECONDS));
+            final var statuses = List.of(first.get(10, SECONDS), second.get(10, SECONDS));
 
             assertThat(statuses).containsExactlyInAnyOrder(201, 409);
             assertThat(userRepository.count()).isEqualTo(1);
@@ -265,11 +266,11 @@ class UserAuthenticationTests {
 
     @Test
     void shouldRollBackRegistrationWhenTokenIssuanceFails() {
-        var credentials = new CredentialsRequest("hotel_guest", randomUUID().toString());
+        final var credentials = new CredentialsRequest("hotel_guest", randomUUID().toString());
         doThrow(new IllegalStateException("Signing unavailable"))
             .when(tokenService).issueToken(anyLong(), any(UserRole.class));
 
-        var exception = catchThrowable(() -> authenticationService.register(credentials));
+        final var exception = catchThrowable(() -> authenticationService.register(credentials));
 
         assertThat(exception).isInstanceOf(IllegalStateException.class);
         assertThat(userRepository.count()).isZero();
@@ -278,7 +279,7 @@ class UserAuthenticationTests {
 
     @SneakyThrows
     private MockHttpServletRequestBuilder credentialsRequest(String path, Object username, Object password) {
-        var payload = new LinkedHashMap<String, Object>();
+        final var payload = new LinkedHashMap<String, Object>();
         payload.put("username", username);
         payload.put("password", password);
         return post(path).contentType(APPLICATION_JSON).content(mapper.writeValueAsBytes(payload));

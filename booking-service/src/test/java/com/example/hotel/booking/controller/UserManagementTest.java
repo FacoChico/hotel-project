@@ -32,6 +32,7 @@ import java.util.Map;
 import java.util.stream.Stream;
 
 import lombok.SneakyThrows;
+
 import tools.jackson.databind.json.JsonMapper;
 
 import static com.example.hotel.booking.domain.UserRole.ADMIN;
@@ -59,7 +60,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
     "spring.datasource.url=jdbc:h2:mem:user_management_tests;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE"
 })
 @AutoConfigureMockMvc(print = NONE)
-class UserManagementTests {
+class UserManagementTest {
     @Autowired
     private MockMvc mockMvc;
     @Autowired

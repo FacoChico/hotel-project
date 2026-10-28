@@ -91,6 +91,9 @@ services:
       <<: *service-environment
       SERVER_PORT: 8080
       SERVICE_HOSTNAME: api-gateway
+      JWT_PUBLIC_KEY: file:/run/public/jwt-public.pem
+    volumes:
+      - jwt-public:/run/public:ro
     ports:
       - "127.0.0.1:${GATEWAY_PORT:-8080}:8080"
     depends_on:

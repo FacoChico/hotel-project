@@ -57,6 +57,7 @@ class OpenApiConfig {
                 .addResponses("BookingCreationUnavailable",
                     problemResponse("HOTEL_SERVICE_UNAVAILABLE or BOOKING_STORAGE_UNAVAILABLE"))
                 .addResponses("BookingTimeout", problemResponse("BOOKING_TIMEOUT"))
+                .addResponses("HotelUnavailable", problemResponse("HOTEL_SERVICE_UNAVAILABLE"))
                 .addResponses("BookingCancellationUnavailable",
                     problemResponse("BOOKING_STORAGE_UNAVAILABLE"))
                 .addHeaders("BookingLocation", new Header()

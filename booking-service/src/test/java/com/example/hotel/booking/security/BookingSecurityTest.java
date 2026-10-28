@@ -57,7 +57,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
     "security.bootstrap-admin.enabled=false"
 })
 @AutoConfigureMockMvc(print = NONE)
-class BookingSecurityTests {
+class BookingSecurityTest {
     @Autowired
     private MockMvc mockMvc;
     @Autowired
@@ -89,9 +89,9 @@ class BookingSecurityTests {
     })
     @SneakyThrows
     void shouldAllowRequestWhenRoleHasPermission(String role, String method, String path) {
-        var token = tokenService.issueToken(42, valueOf(role));
+        final var token = tokenService.issueToken(42, valueOf(role));
 
-        var response = mockMvc.perform(request(HttpMethod.valueOf(method), URI.create(path))
+        final var response = mockMvc.perform(request(HttpMethod.valueOf(method), URI.create(path))
             .header(AUTHORIZATION, "Bearer " + token));
 
         response.andExpect(status().isOk());
@@ -110,9 +110,9 @@ class BookingSecurityTests {
     })
     @SneakyThrows
     void shouldDenyRequestWhenRoleHasNoPermission(String role, String method, String path) {
-        var token = tokenService.issueToken(42, valueOf(role));
+        final var token = tokenService.issueToken(42, valueOf(role));
 
-        var response = mockMvc.perform(request(HttpMethod.valueOf(method), URI.create(path))
+        final var response = mockMvc.perform(request(HttpMethod.valueOf(method), URI.create(path))
             .header(AUTHORIZATION, "Bearer " + token));
 
         response.andExpect(status().isForbidden())
@@ -125,9 +125,9 @@ class BookingSecurityTests {
     @ValueSource(strings = {"/api/v1/users", "/api/v1/bookings", "/actuator/info", "/api/v1/users/auth"})
     @SneakyThrows
     void shouldReturnUnauthorizedWhenTokenIsMissing(String path) {
-        var request = get(path);
+        final var request = get(path);
 
-        var response = mockMvc.perform(request);
+        final var response = mockMvc.perform(request);
 
         response.andExpect(status().isUnauthorized())
             .andExpect(header().string(WWW_AUTHENTICATE, "Bearer"))
@@ -140,9 +140,9 @@ class BookingSecurityTests {
     @ValueSource(strings = {"/api/v1/users/register", "/api/v1/users/auth"})
     @SneakyThrows
     void shouldRejectEmptyAuthenticationBodyWhenTokenIsMissing(String path) {
-        var request = post(path);
+        final var request = post(path);
 
-        var response = mockMvc.perform(request);
+        final var response = mockMvc.perform(request);
 
         response.andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.code").value("INVALID_REQUEST_BODY"));
@@ -152,9 +152,9 @@ class BookingSecurityTests {
     @MethodSource("invalidTokens")
     @SneakyThrows
     void shouldReturnUnauthorizedWhenTokenIsInvalid(String scenario, String token) {
-        var request = get("/api/v1/bookings").header(AUTHORIZATION, "Bearer " + token);
+        final var request = get("/api/v1/bookings").header(AUTHORIZATION, "Bearer " + token);
 
-        var response = mockMvc.perform(request);
+        final var response = mockMvc.perform(request);
 
         response.andExpect(status().isUnauthorized())
             .andExpect(header().string(WWW_AUTHENTICATE, "Bearer"))
@@ -165,11 +165,11 @@ class BookingSecurityTests {
     @Test
     @SneakyThrows
     void shouldIgnoreScopeWhenUserTokenRequestsAdminAuthority() {
-        var claims = userClaims();
+        final var claims = userClaims();
         claims.put("scope", "ADMIN ROLE_ADMIN");
-        var token = sign(claims, KEY_PAIR, RS256);
+        final var token = sign(claims, KEY_PAIR, RS256);
 
-        var response = mockMvc.perform(get("/api/v1/users").header(AUTHORIZATION, "Bearer " + token));
+        final var response = mockMvc.perform(get("/api/v1/users").header(AUTHORIZATION, "Bearer " + token));
 
         response.andExpect(status().isForbidden());
     }
@@ -191,9 +191,9 @@ class BookingSecurityTests {
     })
     @SneakyThrows
     void shouldDenyRequestWhenPathOrMethodIsNotAllowed(String method, String path) {
-        var token = tokenService.issueToken(42, ADMIN);
+        final var token = tokenService.issueToken(42, ADMIN);
 
-        var response = mockMvc.perform(request(HttpMethod.valueOf(method), URI.create(path))
+        final var response = mockMvc.perform(request(HttpMethod.valueOf(method), URI.create(path))
             .header(AUTHORIZATION, "Bearer " + token));
 
         response.andExpect(status().isForbidden());
@@ -202,11 +202,11 @@ class BookingSecurityTests {
     @Test
     @SneakyThrows
     void shouldRequireBearerTokenWhenPreviousRequestWasAuthenticated() {
-        var token = tokenService.issueToken(42, USER);
+        final var token = tokenService.issueToken(42, USER);
         mockMvc.perform(get("/api/v1/bookings").header(AUTHORIZATION, "Bearer " + token))
             .andExpect(status().isOk());
 
-        var response = mockMvc.perform(get("/api/v1/bookings"));
+        final var response = mockMvc.perform(get("/api/v1/bookings"));
 
         response.andExpect(status().isUnauthorized());
     }
@@ -214,9 +214,9 @@ class BookingSecurityTests {
     @Test
     @SneakyThrows
     void shouldAvoidSessionWhenBearerTokenIsAccepted() {
-        var token = tokenService.issueToken(42, USER);
+        final var token = tokenService.issueToken(42, USER);
 
-        var result = mockMvc.perform(get("/api/v1/bookings").header(AUTHORIZATION, "Bearer " + token)).andReturn();
+        final var result = mockMvc.perform(get("/api/v1/bookings").header(AUTHORIZATION, "Bearer " + token)).andReturn();
 
         assertThat(result.getResponse().getStatus()).isEqualTo(200);
         assertThat(result.getRequest().getSession(false)).isNull();
@@ -224,15 +224,15 @@ class BookingSecurityTests {
     }
 
     static Stream<Arguments> invalidTokens() {
-        var tokens = new ArrayList<Arguments>();
+        final var tokens = new ArrayList<Arguments>();
 
         for (var claim : List.of("sub", "iss", "aud", "iat", "exp", "roles")) {
-            var claims = userClaims();
+            final var claims = userClaims();
             claims.remove(claim);
             tokens.add(arguments("missing " + claim, sign(claims, KEY_PAIR, RS256)));
         }
 
-        var invalidClaims = Map.ofEntries(
+        final var invalidClaims = Map.ofEntries(
             Map.entry("sub", "0"),
             Map.entry("iss", "other-issuer"),
             Map.entry("aud", List.of("internal")),
@@ -241,32 +241,32 @@ class BookingSecurityTests {
             Map.entry("roles", List.of("OWNER"))
         );
         invalidClaims.forEach((name, value) -> {
-            var claims = userClaims();
+            final var claims = userClaims();
             claims.put(name, value);
             tokens.add(arguments("invalid " + name, sign(claims, KEY_PAIR, RS256)));
         });
 
         for (var roles : List.of(List.of(), List.of(1), "USER")) {
-            var claims = userClaims();
+            final var claims = userClaims();
             claims.put("roles", roles);
             tokens.add(arguments("malformed roles " + roles, sign(claims, KEY_PAIR, RS256)));
         }
 
         for (var subject : List.of("booking-service", "9223372036854775808", "-1")) {
-            var claims = userClaims();
+            final var claims = userClaims();
             claims.put("sub", subject);
             tokens.add(arguments("invalid subject " + subject, sign(claims, KEY_PAIR, RS256)));
         }
 
-        var excessiveLifetime = userClaims();
+        final var excessiveLifetime = userClaims();
         excessiveLifetime.put("exp", Date.from(Instant.now().plusSeconds(7200)));
         tokens.add(arguments("excessive lifetime", sign(excessiveLifetime, KEY_PAIR, RS256)));
 
-        var futureNotBefore = userClaims();
+        final var futureNotBefore = userClaims();
         futureNotBefore.put("nbf", Date.from(Instant.now().plusSeconds(600)));
         tokens.add(arguments("future not-before", sign(futureNotBefore, KEY_PAIR, RS256)));
 
-        var nullRole = userClaims();
+        final var nullRole = userClaims();
         nullRole.put("roles", asList((String) null));
         tokens.add(arguments("null role", sign(nullRole, KEY_PAIR, RS256)));
         tokens.add(arguments("wrong key", sign(userClaims(), OTHER_KEY_PAIR, RS256)));
@@ -277,8 +277,8 @@ class BookingSecurityTests {
     }
 
     private static Map<String, Object> userClaims() {
-        var now = Instant.now();
-        var claims = new LinkedHashMap<String, Object>();
+        final var now = Instant.now();
+        final var claims = new LinkedHashMap<String, Object>();
         claims.put("sub", "42");
         claims.put("iss", ISSUER);
         claims.put("aud", List.of(AUDIENCE));

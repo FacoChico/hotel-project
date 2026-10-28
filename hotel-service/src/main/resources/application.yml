@@ -28,6 +28,14 @@ eureka:
     hostname: ${SERVICE_HOSTNAME:localhost}
 
 management:
+  tracing:
+    export:
+      otlp:
+        enabled: false
+    sampling:
+      probability: 1.0
+    propagation:
+      type: w3c
   endpoints:
     web:
       exposure:
@@ -58,3 +66,8 @@ springdoc:
   swagger-ui:
     disable-swagger-default-url: true
     persist-authorization: false
+
+logging:
+  structured:
+    format:
+      console: logstash
