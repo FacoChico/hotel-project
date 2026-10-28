@@ -1,8 +1,8 @@
 package com.example.hotel.booking.security;
 
 import com.example.hotel.booking.config.JwtConfig;
-import com.example.hotel.booking.properties.JwtProperties;
 import com.example.hotel.booking.domain.UserRole;
+import com.example.hotel.booking.properties.JwtProperties;
 import com.nimbusds.jose.crypto.RSASSAVerifier;
 import com.nimbusds.jwt.SignedJWT;
 
@@ -21,21 +21,21 @@ import static com.example.hotel.booking.testutil.JwtTestKeys.ISSUER;
 import static com.example.hotel.booking.testutil.JwtTestKeys.KEY_PAIR;
 import static org.assertj.core.api.Assertions.assertThat;
 
-class JwtTokenServiceTests {
+class JwtTokenServiceTest {
 
     @ParameterizedTest
     @EnumSource(UserRole.class)
     @SneakyThrows
     void shouldIssueSignedTokenWhenUserHasSupportedRole(UserRole role) {
-        var now = Instant.parse("2026-10-24T10:00:00Z");
-        var clock = Clock.fixed(now, ZoneOffset.UTC);
-        var properties = new JwtProperties(ISSUER, AUDIENCE, null, null);
-        var encoder = new JwtConfig().jwtEncoder(KEY_PAIR);
-        var service = new JwtTokenService(encoder, properties, clock);
+        final var now = Instant.parse("2026-10-24T10:00:00Z");
+        final var clock = Clock.fixed(now, ZoneOffset.UTC);
+        final var properties = new JwtProperties(ISSUER, AUDIENCE, null, null);
+        final var encoder = new JwtConfig().jwtEncoder(KEY_PAIR);
+        final var service = new JwtTokenService(encoder, properties, clock);
 
-        var token = service.issueToken(42, role);
-        var signedToken = SignedJWT.parse(token);
-        var claims = signedToken.getJWTClaimsSet();
+        final var token = service.issueToken(42, role);
+        final var signedToken = SignedJWT.parse(token);
+        final var claims = signedToken.getJWTClaimsSet();
 
         assertThat(signedToken.verify(new RSASSAVerifier((RSAPublicKey) KEY_PAIR.getPublic()))).isTrue();
         assertThat(signedToken.getHeader().getAlgorithm().getName()).isEqualTo("RS256");

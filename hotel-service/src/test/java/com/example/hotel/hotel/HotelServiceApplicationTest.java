@@ -1,13 +1,19 @@
-package com.example.hotel.discovery;
+package com.example.hotel.hotel;
 
-import java.net.URI;
+import com.example.hotel.hotel.testutil.JwtTestKeys;
 
-import com.netflix.eureka.cluster.PeerEurekaNodes;
-import lombok.SneakyThrows;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+
+import java.net.URI;
+
+import javax.sql.DataSource;
+
+import lombok.SneakyThrows;
 
 import static java.net.http.HttpClient.newHttpClient;
 import static java.net.http.HttpRequest.newBuilder;
@@ -15,19 +21,20 @@ import static java.net.http.HttpResponse.BodyHandlers.ofString;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.boot.test.context.SpringBootTest.WebEnvironment.RANDOM_PORT;
 
-@SpringBootTest(webEnvironment = RANDOM_PORT)
-class DiscoveryServerApplicationTests {
+@SpringBootTest(
+    webEnvironment = RANDOM_PORT,
+    properties = "eureka.client.enabled=false"
+)
+class HotelServiceApplicationTest {
     @LocalServerPort
     private int applicationPort;
 
     @Autowired
-    private PeerEurekaNodes replicationPeers;
+    private DataSource dataSource;
 
-    @Test
-    void shouldHaveNoReplicationPeersWhenRunningStandalone() {
-        var configuredReplicationPeers = replicationPeers.getPeerEurekaNodes();
-
-        assertThat(configuredReplicationPeers).isEmpty();
+    @DynamicPropertySource
+    static void registerJwtProperties(DynamicPropertyRegistry registry) {
+        JwtTestKeys.registerProperties(registry);
     }
 
     @Test
@@ -40,6 +47,20 @@ class DiscoveryServerApplicationTests {
 
             assertThat(healthResponse.statusCode()).isEqualTo(200);
             assertThat(healthResponse.body()).contains("\"status\":\"UP\"");
+        }
+    }
+
+    @Test
+    @SneakyThrows
+    void shouldConnectToDb() {
+        var expectedDatabaseUrl = "jdbc:h2:mem:hotel_service";
+
+        try (var connection = dataSource.getConnection()) {
+            var databaseUrl = connection.getMetaData().getURL();
+            var connectionIsValid = connection.isValid(1);
+
+            assertThat(databaseUrl).isEqualTo(expectedDatabaseUrl);
+            assertThat(connectionIsValid).isTrue();
         }
     }
 }

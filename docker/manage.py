@@ -120,6 +120,7 @@ def prepare_access(show=True):
     save_json(ACCESS / "compose-admin-token.json", admin)
     save_json(ACCESS / "compose-user-token.json", user)
     if show:
+        prepare_demo(admin_token, user["accessToken"])
         print("Local stack is ready")
         for name, default in (("DISCOVERY", 8761), ("GATEWAY", 8080), ("HOTEL", 8081), ("BOOKING", 8082)):
             port = os.environ.get(name + "_PORT", str(default))
@@ -135,6 +136,36 @@ def prepare_access(show=True):
         print("All application tests: docker compose run --build --rm tests")
         print("Logs: docker compose logs -f | Stop: docker compose down")
     return admin_token, user["accessToken"]
+
+
+def prepare_demo(admin, user):
+    manifest = LOCAL / "state/demo.json"
+    if manifest.exists():
+        saved = json.loads(manifest.read_text())
+        code, hotel = response(f"/api/v1/hotels/{saved['hotelId']}", token=admin)
+        if code == 200 and hotel["name"] == "Demo Hotel":
+            print(f"Demo data: hotel {saved['hotelId']}, rooms {saved['roomIds']}, period {saved['period']}")
+            return
+    hotel = expect("/api/v1/hotels", method="POST", token=admin, status=201,
+                   payload={"name": "Demo Hotel", "address": "Central Street, 10"})
+    rooms = [expect("/api/v1/rooms", method="POST", token=admin, status=201,
+                    payload={"hotelId": hotel["id"], "number": number, "available": available})
+             for number, available in (("101", True), ("102", True), ("103", True), ("201", False))]
+    start = datetime.now(timezone.utc).date() + timedelta(days=7)
+    bookings = []
+    for room, offset, cancel in ((rooms[0], 0, False), (rooms[1], 3, True), (rooms[1], 6, True)):
+        booking = expect("/api/v1/bookings", method="POST", token=user, status=201,
+                         payload={"requestId": str(uuid4()), "autoSelect": False, "roomId": room["id"],
+                                  "startDate": (start + timedelta(days=offset)).isoformat(),
+                                  "endDate": (start + timedelta(days=offset + 2)).isoformat()})
+        if cancel:
+            expect(f"/api/v1/bookings/{booking['id']}", method="DELETE", token=user)
+        bookings.append(booking["id"])
+    period = {"startDate": start.isoformat(), "endDate": (start + timedelta(days=2)).isoformat()}
+    save_json(manifest, {"hotelId": hotel["id"], "roomIds": [room["id"] for room in rooms],
+                         "bookingIds": bookings, "period": period})
+    print(f"Demo data: hotel {hotel['id']}, rooms {[room['id'] for room in rooms]}, period {period}")
+    print("Room counters: 101=1, 102=2, 103=0, 201=0 (unavailable). Bookings: one CONFIRMED, two CANCELLED")
 
 
 def login(role):

@@ -19,7 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 
 @DataJpaTest
-class UserRepositoryTests {
+class UserRepositoryTest {
     private static final String PASSWORD_HASH = "test-password-hash";
     @Autowired
     private UserRepository userRepository;
@@ -30,10 +30,10 @@ class UserRepositoryTests {
 
     @Test
     void shouldHaveUserSchemaWhenMigrationsAreApplied() {
-        var migrationInfo = flyway.info();
+        final var migrationInfo = flyway.info();
 
-        var appliedMigrations = migrationInfo.applied();
-        var pendingMigrations = migrationInfo.pending();
+        final var appliedMigrations = migrationInfo.applied();
+        final var pendingMigrations = migrationInfo.pending();
 
         assertThat(appliedMigrations)
             .extracting(MigrationInfo::getScript)
@@ -44,12 +44,12 @@ class UserRepositoryTests {
     @ParameterizedTest
     @EnumSource(UserRole.class)
     void shouldPersistUser(UserRole role) {
-        var user = new User("hotel_guest", PASSWORD_HASH, role);
+        final var user = new User("hotel_guest", PASSWORD_HASH, role);
 
-        var savedUser = userRepository.saveAndFlush(user);
+        final var savedUser = userRepository.saveAndFlush(user);
         entityManager.clear();
-        var persistedUser = userRepository.findById(savedUser.getId()).orElseThrow();
-        var persistedRole = entityManager.createNativeQuery("SELECT role FROM users WHERE id = :id", String.class)
+        final var persistedUser = userRepository.findById(savedUser.getId()).orElseThrow();
+        final var persistedRole = entityManager.createNativeQuery("SELECT role FROM users WHERE id = :id", String.class)
             .setParameter("id", savedUser.getId())
             .getSingleResult();
 
@@ -62,13 +62,13 @@ class UserRepositoryTests {
 
     @Test
     void shouldFindExactUserWhenUsernamesDifferOnlyByCase() {
-        var lowerCaseUser = userRepository.saveAndFlush(new User("hotel_guest", PASSWORD_HASH, USER));
-        var mixedCaseUser = userRepository.saveAndFlush(new User("Hotel_Guest", PASSWORD_HASH, USER));
+        final var lowerCaseUser = userRepository.saveAndFlush(new User("hotel_guest", PASSWORD_HASH, USER));
+        final var mixedCaseUser = userRepository.saveAndFlush(new User("Hotel_Guest", PASSWORD_HASH, USER));
         entityManager.clear();
 
-        var lowerCaseMatch = userRepository.findByUsername("hotel_guest");
-        var mixedCaseMatch = userRepository.findByUsername("Hotel_Guest");
-        var upperCaseMatch = userRepository.findByUsername("HOTEL_GUEST");
+        final var lowerCaseMatch = userRepository.findByUsername("hotel_guest");
+        final var mixedCaseMatch = userRepository.findByUsername("Hotel_Guest");
+        final var upperCaseMatch = userRepository.findByUsername("HOTEL_GUEST");
 
         assertThat(lowerCaseMatch).get()
             .extracting(User::getId)
@@ -81,7 +81,7 @@ class UserRepositoryTests {
 
     @Test
     void shouldReturnEmptyWhenUsernameDoesNotExist() {
-        var user = userRepository.findByUsername("unknown_guest");
+        final var user = userRepository.findByUsername("unknown_guest");
 
         assertThat(user).isEmpty();
     }
@@ -89,9 +89,9 @@ class UserRepositoryTests {
     @Test
     void shouldRejectUserWhenUsernameAlreadyExists() {
         userRepository.saveAndFlush(new User("hotel_guest", PASSWORD_HASH, USER));
-        var duplicateUser = new User("hotel_guest", PASSWORD_HASH, USER);
+        final var duplicateUser = new User("hotel_guest", PASSWORD_HASH, USER);
 
-        var exception = catchThrowable(() -> userRepository.saveAndFlush(duplicateUser));
+        final var exception = catchThrowable(() -> userRepository.saveAndFlush(duplicateUser));
 
         assertThat(exception)
             .isInstanceOf(DataIntegrityViolationException.class);
