@@ -3,6 +3,7 @@ package com.example.hotel.booking.service;
 import com.example.hotel.booking.controller.dto.BookingPageResponse;
 import com.example.hotel.booking.controller.dto.BookingResponse;
 import com.example.hotel.booking.controller.dto.CreateBookingRequest;
+import com.example.hotel.booking.controller.dto.RoomPageResponse;
 import com.example.hotel.booking.domain.Booking;
 import com.example.hotel.booking.gateway.HotelServiceGateway;
 import com.example.hotel.booking.gateway.exception.HotelServiceException;
@@ -10,6 +11,7 @@ import com.example.hotel.booking.repository.BookingRepository;
 import com.example.hotel.booking.service.exception.BookingCancellationException;
 import com.example.hotel.booking.service.exception.BookingCreationException;
 import com.example.hotel.booking.service.exception.BookingNotFoundException;
+import com.example.hotel.booking.service.exception.InvalidBookingRequestException;
 import com.example.hotel.booking.service.exception.UserNotFoundException;
 
 import org.hibernate.exception.ConstraintViolationException;
@@ -20,6 +22,8 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+import java.util.LinkedHashSet;
 import java.util.List;
 
 import lombok.RequiredArgsConstructor;
@@ -86,21 +90,35 @@ public class BookingService {
     }
 
     private Booking selectAndReserveRoom(Booking booking, String userToken) {
-        final var candidates = hotelServiceGateway.recommend(booking, userToken, booking.getDeadlineAt()).iterator();
-        while (candidates.hasNext()) {
-            booking = transactions.selectRoom(booking.getId(), candidates.next());
-            try {
-                hotelServiceGateway.confirm(booking, booking.getDeadlineAt());
-                return booking;
-            } catch (HotelServiceException exception) {
-                final var roomIsUnavailable = "ROOM_UNAVAILABLE".equals(exception.getCode());
-                if (!roomIsUnavailable || !candidates.hasNext()) {
-                    throw exception;
+        final var attemptedRoomIds = new LinkedHashSet<Long>();
+        while (true) {
+            final var candidates = hotelServiceGateway.recommend(booking, userToken, booking.getDeadlineAt(), attemptedRoomIds);
+            if (candidates.isEmpty()) {
+                throw new HotelServiceException(CONFLICT, "ROOM_UNAVAILABLE", "No recommended room is available", false);
+            }
+            for (final var roomId : candidates) {
+                booking = transactions.selectRoom(booking.getId(), roomId);
+                try {
+                    hotelServiceGateway.confirm(booking, booking.getDeadlineAt());
+                    return booking;
+                } catch (HotelServiceException exception) {
+                    final var roomIsUnavailable = "ROOM_UNAVAILABLE".equals(exception.getCode());
+                    if (!roomIsUnavailable) {
+                        throw exception;
+                    }
+                    hotelServiceGateway.release(booking, booking.getDeadlineAt());
+                    attemptedRoomIds.add(roomId);
                 }
-                hotelServiceGateway.release(booking, booking.getDeadlineAt());
             }
         }
-        throw new HotelServiceException(CONFLICT, "ROOM_UNAVAILABLE", "No recommended room is available", false);
+    }
+
+    public RoomPageResponse recommendRooms(LocalDate startDate, LocalDate endDate, Long hotelId,
+                                           int page, int size, String userToken) {
+        if (!startDate.isBefore(endDate)) {
+            throw new InvalidBookingRequestException("startDate must precede endDate");
+        }
+        return hotelServiceGateway.recommend(startDate, endDate, hotelId, page, size, userToken);
     }
 
     @Transactional(readOnly = true)

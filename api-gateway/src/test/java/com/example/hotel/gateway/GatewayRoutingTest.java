@@ -84,6 +84,7 @@ class GatewayRoutingTest {
         "POST, /api/v1/bookings, booking-service",
         "GET, /api/v1/bookings, booking-service",
         "GET, /api/v1/bookings/42, booking-service",
+        "GET, /api/v1/bookings/recommendations, booking-service",
         "DELETE, /api/v1/bookings/42, booking-service"
     })
     void shouldForwardRequestWhenPublicRouteMatches(String httpMethod, String requestPath, String expectedServiceName) {

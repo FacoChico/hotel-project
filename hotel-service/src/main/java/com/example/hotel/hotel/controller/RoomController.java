@@ -20,6 +20,14 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
+import java.util.List;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Positive;
+
+import lombok.RequiredArgsConstructor;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -27,11 +35,6 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.validation.Valid;
-import jakarta.validation.constraints.Max;
-import jakarta.validation.constraints.Min;
-import jakarta.validation.constraints.Positive;
-import lombok.RequiredArgsConstructor;
 
 import static org.springframework.http.HttpStatus.CREATED;
 import static org.springframework.http.HttpStatus.NO_CONTENT;
@@ -73,10 +76,10 @@ class RoomController {
     @ApiResponse(responseCode = "200", useReturnTypeSchema = true)
     @GetMapping
     private RoomPageResponse listAvailableRooms(@RequestParam @DateTimeFormat(pattern = DATE_PATTERN) LocalDate startDate,
-                                                @RequestParam @DateTimeFormat(pattern = DATE_PATTERN) LocalDate endDate,
-                                                @RequestParam(required = false) @Positive Long hotelId,
-                                                @RequestParam(defaultValue = "0") @Min(0) int page,
-                                                @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
+                                               @RequestParam @DateTimeFormat(pattern = DATE_PATTERN) LocalDate endDate,
+                                               @RequestParam(required = false) @Positive Long hotelId,
+                                               @RequestParam(defaultValue = "0") @Min(0) int page,
+                                               @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
         return roomService.listAvailableRooms(startDate, endDate, hotelId, page, size);
     }
 
@@ -85,11 +88,12 @@ class RoomController {
     @ApiResponse(responseCode = "200", useReturnTypeSchema = true)
     @GetMapping("/recommend")
     private RoomPageResponse recommendAvailableRooms(@RequestParam @DateTimeFormat(pattern = DATE_PATTERN) LocalDate startDate,
-                                                     @RequestParam @DateTimeFormat(pattern = DATE_PATTERN) LocalDate endDate,
-                                                     @RequestParam(required = false) @Positive Long hotelId,
-                                                     @RequestParam(defaultValue = "0") @Min(0) int page,
-                                                     @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
-        return roomService.recommendAvailableRooms(startDate, endDate, hotelId, page, size);
+                                                    @RequestParam @DateTimeFormat(pattern = DATE_PATTERN) LocalDate endDate,
+                                                    @RequestParam(required = false) @Positive Long hotelId,
+                                                    @RequestParam(defaultValue = "0") @Min(0) int page,
+                                                    @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size,
+                                                    @RequestParam(defaultValue = "") List<@Positive Long> excludedRoomIds) {
+        return roomService.recommendAvailableRooms(startDate, endDate, hotelId, page, size, excludedRoomIds);
     }
 
     @Operation(summary = "Get room occupancy statistics",
@@ -101,10 +105,10 @@ class RoomController {
     @ApiResponse(responseCode = "200", useReturnTypeSchema = true)
     @GetMapping("/statistics")
     private RoomStatisticsPageResponse getOccupancyStatistics(@RequestParam @DateTimeFormat(pattern = DATE_PATTERN) LocalDate startDate,
-                                                              @RequestParam @DateTimeFormat(pattern = DATE_PATTERN) LocalDate endDate,
-                                                              @RequestParam(required = false) @Positive Long hotelId,
-                                                              @RequestParam(defaultValue = "0") @Min(0) int page,
-                                                              @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
+                                                             @RequestParam @DateTimeFormat(pattern = DATE_PATTERN) LocalDate endDate,
+                                                             @RequestParam(required = false) @Positive Long hotelId,
+                                                             @RequestParam(defaultValue = "0") @Min(0) int page,
+                                                             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
         return roomService.getOccupancyStatistics(startDate, endDate, hotelId, page, size);
     }
 
@@ -132,7 +136,7 @@ class RoomController {
     })
     @PatchMapping("/{id:[0-9]+}")
     private RoomResponse updateRoom(@PathVariable @Positive long id,
-                                    @Valid @RequestBody UpdateRoomRequest request) {
+                                   @Valid @RequestBody UpdateRoomRequest request) {
         return roomService.updateRoom(id, request);
     }
 

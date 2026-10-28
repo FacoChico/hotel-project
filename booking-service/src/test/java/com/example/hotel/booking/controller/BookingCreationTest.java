@@ -3,6 +3,7 @@ package com.example.hotel.booking.controller;
 import com.example.hotel.booking.domain.Booking;
 import com.example.hotel.booking.domain.User;
 import com.example.hotel.booking.gateway.HotelServiceGateway;
+import com.example.hotel.booking.gateway.HttpHotelServiceGateway;
 import com.example.hotel.booking.gateway.exception.HotelServiceException;
 import com.example.hotel.booking.properties.HotelClientProperties;
 import com.example.hotel.booking.repository.BookingRepository;
@@ -66,6 +67,8 @@ import java.util.function.Consumer;
 import java.util.stream.Stream;
 
 import lombok.SneakyThrows;
+
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -81,6 +84,7 @@ import static java.time.ZoneOffset.UTC;
 import static java.util.UUID.randomUUID;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doAnswer;
@@ -92,6 +96,7 @@ import static org.springframework.http.HttpStatus.GATEWAY_TIMEOUT;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.http.MediaType.APPLICATION_PROBLEM_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive;
@@ -118,6 +123,8 @@ class BookingCreationTest {
 
     @Autowired
     private MockMvc mockMvc;
+    @Autowired
+    private CircuitBreaker circuitBreaker;
     @Autowired
     private BookingRepository bookingRepository;
     @Autowired
@@ -154,6 +161,7 @@ class BookingCreationTest {
 
     @BeforeEach
     void prepareBooking() {
+        circuitBreaker.reset();
         JWT_VERIFIER.set(new RSASSAVerifier((RSAPublicKey) jwtKeyPair.getPublic()));
         CLOCK_OFFSET.set(Duration.ZERO);
         bookingRepository.deleteAll();
@@ -295,6 +303,39 @@ class BookingCreationTest {
         assertThat(requests("release").getFirst().body().get("reason").asString()).isEqualTo("COMPENSATION");
     }
 
+    @Test
+    @SneakyThrows
+    void shouldRefreshRecommendationsWhenFirstTwentyRoomsAreTakenConcurrently() {
+        final var firstBatch = java.util.stream.LongStream.rangeClosed(1, 20).boxed().toList();
+        HOTEL_HANDLER.set(request -> {
+            if (request.path().endsWith("recommend")) {
+                if (requests("recommend").size() == 1) {
+                    respondRecommendations(request, firstBatch);
+                } else {
+                    final var query = request.exchange().getRequestURI().getQuery();
+                    assertThat(query).contains("page=0");
+                    firstBatch.forEach(id -> assertThat(query).contains("excludedRoomIds=" + id));
+                    respondRecommendations(request, List.of(21L));
+                }
+            } else if (request.path().endsWith("confirm-availability")
+                && !request.path().equals("/api/v1/rooms/21/confirm-availability")) {
+                respond(request, 409, Map.of("code", "ROOM_UNAVAILABLE"));
+            } else {
+                respondSuccessfully(request);
+            }
+        });
+
+        final var result = create(automaticRequest());
+        final var booking = bookingRepository.findAll().getFirst();
+
+        assertThat(result.getResponse().getStatus()).isEqualTo(201);
+        assertThat(booking.getStatus()).isEqualTo(CONFIRMED);
+        assertThat(booking.getRoomId()).isEqualTo(21L);
+        assertThat(requests("recommend")).hasSize(2);
+        assertThat(requests("confirm-availability")).hasSize(21);
+        assertThat(requests("release")).hasSize(20);
+    }
+
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
     @SneakyThrows
@@ -303,7 +344,7 @@ class BookingCreationTest {
             if (request.path().endsWith("recommend")) {
                 respondRecommendations(request, empty
                     ? List.of()
-                    : List.of(43L, 42L));
+                    : requests("recommend").size() == 1 ? List.of(43L, 42L) : List.of());
             } else if (request.path().endsWith("confirm-availability")) {
                 respond(request, 409, Map.of("code", "ROOM_UNAVAILABLE"));
             } else {
@@ -319,13 +360,13 @@ class BookingCreationTest {
             .isEqualTo("ROOM_UNAVAILABLE");
         assertThat(booking.getStatus()).isEqualTo(CANCELLED);
         assertThat(booking.isReleasePending()).isFalse();
-        assertThat(requests("recommend")).hasSize(1);
+        assertThat(requests("recommend")).hasSize(empty ? 1 : 2);
         assertThat(requests("confirm-availability")).hasSize(empty
             ? 0
             : 2);
         assertThat(requests("release")).hasSize(empty
             ? 0
-            : 2);
+            : 3);
     }
 
     @ParameterizedTest
@@ -945,8 +986,8 @@ class BookingCreationTest {
 
     @Test
     void shouldReportDependencyFailureWhenServiceRegistryIsEmpty() {
-        final var client = new HotelServiceGateway(hotelRestClientBuilder.clone().baseUrl("http://missing-hotel"),
-            hotelHttpClient, properties, internalTokenService, clock, JSON);
+        final var client = new HttpHotelServiceGateway(hotelRestClientBuilder.clone().baseUrl("http://missing-hotel"),
+            hotelHttpClient, properties, internalTokenService, clock, JSON, circuitBreaker);
         final var now = clock.instant();
         final var booking = bookingRepository.saveAndFlush(new Booking(user, randomUUID(), false, null, 42L,
             LocalDate.now(clock), LocalDate.now(clock).plusDays(1), now, now.plusSeconds(5)));
@@ -1035,6 +1076,118 @@ class BookingCreationTest {
         assertThat(result.getResponse().getStatus()).isEqualTo(401);
         assertThat(bookingRepository.count()).isZero();
         assertThat(HOTEL_REQUESTS).isEmpty();
+    }
+
+    @Test
+    @SneakyThrows
+    void shouldReturnRecommendationListWhenUserRequestsRoomSuggestions() {
+        final var payload = automaticRequest();
+
+        final var result = mockMvc.perform(get("/api/v1/bookings/recommendations")
+            .header(AUTHORIZATION, "Bearer " + tokenService.issueToken(user.getId(), USER))
+            .param("hotelId", "11").param("startDate", payload.get("startDate").toString())
+            .param("endDate", payload.get("endDate").toString()));
+
+        result.andExpect(status().isOk());
+        final var body = JSON.readTree(result.andReturn().getResponse().getContentAsString());
+        assertThat(body.get("content").get(0).get("id").longValue()).isEqualTo(43L);
+        assertThat(body.get("content").get(1).get("id").longValue()).isEqualTo(42L);
+        assertThat(body.get("totalElements").longValue()).isEqualTo(2);
+        assertThat(bookingRepository.count()).isZero();
+        assertThat(HOTEL_REQUESTS).hasSize(1);
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+        "NONE, 2027-01-10, 2027-01-12, 20, 401",
+        "ADMIN, 2027-01-10, 2027-01-12, 20, 403",
+        "USER, 2027-01-10, 2027-01-10, 20, 400",
+        "USER, 2027-01-12, 2027-01-10, 20, 400",
+        "USER, 2027-01-10, 2027-01-12, 101, 400"
+    })
+    @SneakyThrows
+    void shouldRejectRecommendationsWhenAccessOrParametersAreInvalid(String role, String startDate,
+                                                                     String endDate, int size, int expectedStatus) {
+        final var request = get("/api/v1/bookings/recommendations")
+            .param("startDate", startDate).param("endDate", endDate).param("size", Integer.toString(size));
+        if (!role.equals("NONE")) {
+            request.header(AUTHORIZATION, "Bearer " + tokenService.issueToken(user.getId(),
+                role.equals("ADMIN") ? ADMIN : USER));
+        }
+
+        final var result = mockMvc.perform(request);
+
+        result.andExpect(status().is(expectedStatus));
+        assertThat(HOTEL_REQUESTS).isEmpty();
+        assertThat(bookingRepository.count()).isZero();
+    }
+
+    @Test
+    @SneakyThrows
+    void shouldReportDependencyFailureWhenRecommendationsCannotBeLoaded() {
+        HOTEL_HANDLER.set(request -> respond(request, 503, Map.of()));
+
+        final var result = mockMvc.perform(get("/api/v1/bookings/recommendations")
+            .header(AUTHORIZATION, "Bearer " + tokenService.issueToken(user.getId(), USER))
+            .param("startDate", "2027-01-10").param("endDate", "2027-01-12"));
+
+        result.andExpect(status().isServiceUnavailable());
+        assertThat(JSON.readTree(result.andReturn().getResponse().getContentAsString()).get("code").asString())
+            .isEqualTo("HOTEL_SERVICE_UNAVAILABLE");
+        assertThat(HOTEL_REQUESTS).hasSize(3);
+        assertThat(bookingRepository.count()).isZero();
+    }
+
+    @Test
+    void shouldStopRemoteRequestsWhenCircuitOpensAfterDependencyFailures() {
+        final var now = clock.instant();
+        final var booking = bookingRepository.saveAndFlush(new Booking(user, randomUUID(), false, null, 42L,
+            LocalDate.now(clock), LocalDate.now(clock).plusDays(1), now, now.plusSeconds(5)));
+        HOTEL_HANDLER.set(request -> respond(request, 503, Map.of()));
+        for (var call = 0; call < 10; call++) {
+            assertThatThrownBy(() -> hotelServiceGateway.confirm(booking, clock.instant().plusSeconds(5)))
+                .isInstanceOf(HotelServiceException.class);
+        }
+        final var requestsBeforeRejection = HOTEL_REQUESTS.size();
+
+        assertThatThrownBy(() -> hotelServiceGateway.confirm(booking, clock.instant().plusSeconds(5)))
+            .isInstanceOf(HotelServiceException.class);
+
+        assertThat(circuitBreaker.getState()).isEqualTo(CircuitBreaker.State.OPEN);
+        assertThat(requestsBeforeRejection).isEqualTo(30);
+        assertThat(HOTEL_REQUESTS).hasSize(requestsBeforeRejection);
+    }
+
+    @Test
+    void shouldCloseCircuitWhenHalfOpenProbesSucceed() {
+        final var now = clock.instant();
+        final var booking = bookingRepository.saveAndFlush(new Booking(user, randomUUID(), false, null, 42L,
+            LocalDate.now(clock), LocalDate.now(clock).plusDays(1), now, now.plusSeconds(5)));
+        circuitBreaker.transitionToOpenState();
+        circuitBreaker.transitionToHalfOpenState();
+
+        for (var call = 0; call < 3; call++) {
+            hotelServiceGateway.confirm(booking, clock.instant().plusSeconds(5));
+        }
+
+        assertThat(circuitBreaker.getState()).isEqualTo(CircuitBreaker.State.CLOSED);
+        assertThat(HOTEL_REQUESTS).hasSize(3);
+    }
+
+    @Test
+    void shouldKeepCircuitClosedWhenHotelRejectsUnavailableRooms() {
+        final var now = clock.instant();
+        final var booking = bookingRepository.saveAndFlush(new Booking(user, randomUUID(), false, null, 42L,
+            LocalDate.now(clock), LocalDate.now(clock).plusDays(1), now, now.plusSeconds(5)));
+        HOTEL_HANDLER.set(request -> respond(request, 409, Map.of("code", "ROOM_UNAVAILABLE")));
+
+        for (var call = 0; call < 20; call++) {
+            assertThatThrownBy(() -> hotelServiceGateway.confirm(booking, clock.instant().plusSeconds(5)))
+                .isInstanceOf(HotelServiceException.class);
+        }
+
+        assertThat(circuitBreaker.getState()).isEqualTo(CircuitBreaker.State.CLOSED);
+        assertThat(HOTEL_REQUESTS).hasSize(20);
     }
 
     private Map<String, Object> automaticRequest() {

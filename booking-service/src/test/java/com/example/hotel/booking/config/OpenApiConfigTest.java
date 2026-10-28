@@ -13,6 +13,7 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
 import lombok.SneakyThrows;
+
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -53,7 +54,7 @@ class OpenApiConfigTest {
         response.andExpect(status().isOk());
         assertThat(paths.propertyNames()).containsExactlyInAnyOrder(
             "/api/v1/users/register", "/api/v1/users/auth", "/api/v1/users", "/api/v1/users/{id}",
-            "/api/v1/bookings", "/api/v1/bookings/{id}");
+            "/api/v1/bookings", "/api/v1/bookings/{id}", "/api/v1/bookings/recommendations");
         for (final var path : paths.propertyNames()) {
             for (final var method : paths.path(path).propertyNames()) {
                 final var responses = paths.path(path).path(method).path("responses");

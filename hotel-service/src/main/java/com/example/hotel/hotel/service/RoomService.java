@@ -35,6 +35,7 @@ import lombok.RequiredArgsConstructor;
 
 import static com.example.hotel.hotel.domain.RoomReservationState.RESERVED;
 import static com.example.hotel.hotel.repository.RoomSpecifications.availableForDates;
+import static com.example.hotel.hotel.repository.RoomSpecifications.excludingRooms;
 import static java.time.temporal.ChronoUnit.DAYS;
 import static java.util.Locale.ROOT;
 
@@ -66,7 +67,7 @@ public class RoomService {
                                                Long hotelId,
                                                int page,
                                                int size) {
-        return findAvailableRooms(startDate, endDate, hotelId, PageRequest.of(page, size, Sort.by("id")));
+        return findAvailableRooms(startDate, endDate, hotelId, List.of(), PageRequest.of(page, size, Sort.by("id")));
     }
 
     @Transactional(readOnly = true)
@@ -75,7 +76,14 @@ public class RoomService {
                                                     Long hotelId,
                                                     int page,
                                                     int size) {
-        return findAvailableRooms(startDate, endDate, hotelId, PageRequest.of(page, size, Sort.by("timesBooked", "id")));
+        return recommendAvailableRooms(startDate, endDate, hotelId, page, size, List.of());
+    }
+
+    @Transactional(readOnly = true)
+    public RoomPageResponse recommendAvailableRooms(LocalDate startDate, LocalDate endDate, Long hotelId,
+                                                    int page, int size, List<Long> excludedRoomIds) {
+        return findAvailableRooms(startDate, endDate, hotelId, excludedRoomIds,
+            PageRequest.of(page, size, Sort.by("timesBooked", "id")));
     }
 
     @Transactional(readOnly = true)
@@ -144,12 +152,12 @@ public class RoomService {
         roomRepository.delete(room);
     }
 
-    private RoomPageResponse findAvailableRooms(LocalDate startDate, LocalDate endDate, Long hotelId, Pageable pageable) {
+    private RoomPageResponse findAvailableRooms(LocalDate startDate, LocalDate endDate, Long hotelId, List<Long> excludedRoomIds, Pageable pageable) {
         if (!startDate.isBefore(endDate)) {
             throw new InvalidReservationDatesException();
         }
 
-        final var specification = availableForDates(startDate, endDate, hotelId);
+        final var specification = availableForDates(startDate, endDate, hotelId).and(excludingRooms(excludedRoomIds));
         final var totalElements = roomRepository.count(specification);
         if (pageable.getOffset() >= totalElements) {
             return new RoomPageResponse(List.of(), pageable.getPageNumber(), pageable.getPageSize(), totalElements);

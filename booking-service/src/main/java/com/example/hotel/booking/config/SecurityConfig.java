@@ -46,7 +46,7 @@ class SecurityConfig {
                 .requestMatchers(POST, "/api/v1/users").hasRole("ADMIN")
                 .requestMatchers(PATCH, "/api/v1/users/{id}").hasRole("ADMIN")
                 .requestMatchers(DELETE, "/api/v1/users/{id}").hasRole("ADMIN")
-                .requestMatchers(GET, "/api/v1/bookings", "/api/v1/bookings/{id}").hasRole("USER")
+                .requestMatchers(GET, "/api/v1/bookings", "/api/v1/bookings/{id}", "/api/v1/bookings/recommendations").hasRole("USER")
                 .requestMatchers(POST, "/api/v1/bookings").hasRole("USER")
                 .requestMatchers(DELETE, "/api/v1/bookings/{id}").hasRole("USER")
                 .anyRequest().denyAll())

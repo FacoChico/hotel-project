@@ -55,6 +55,11 @@ spring:
               predicates:
                 - Path=/api/v1/bookings
                 - Method=GET,POST
+            - id: booking-recommendations
+              uri: lb://booking-service
+              predicates:
+                - Path=/api/v1/bookings/recommendations
+                - Method=GET
             - id: booking-item
               uri: lb://booking-service
               predicates:

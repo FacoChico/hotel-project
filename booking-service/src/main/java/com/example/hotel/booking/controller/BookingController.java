@@ -53,7 +53,7 @@ class BookingController {
     @Operation(summary = "Create or repeat a booking",
         description = """
             Requires USER. requestId is unique per user. Repeating the same request returns the existing booking.
-            Automatic selection tries up to 20 rooms ordered by timesBooked, then ID.
+            Automatic selection refreshes candidates after conflicts within the operation deadline.
             """)
     @ApiResponses({
         @ApiResponse(responseCode = "201",

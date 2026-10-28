@@ -10,6 +10,7 @@ import com.example.hotel.hotel.repository.RoomReservationRepository;
 import com.example.hotel.hotel.testutil.JwtTestKeys;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -34,6 +35,7 @@ import java.util.UUID;
 import java.util.stream.Stream;
 
 import lombok.SneakyThrows;
+
 import tools.jackson.databind.json.JsonMapper;
 
 import static com.example.hotel.hotel.domain.RoomReservationState.RELEASED;
@@ -361,6 +363,32 @@ class RoomSearchTest {
         final var result = mockMvc.perform(request);
 
         result.andExpect(status().isUnauthorized()).andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    }
+
+    @Test
+    @SneakyThrows
+    void shouldExcludeAttemptedRoomsWhenRecommendationsAreRefreshed() {
+        final var hotel = createHotel("City Hotel");
+        final var attempted = createRoom(hotel, "101", true, 0);
+        final var next = createRoom(hotel, "102", true, 1);
+        final var last = createRoom(hotel, "103", true, 2);
+
+        final var result = search("/api/v1/rooms/recommend", "USER",
+            queryWith("excludedRoomIds", attempted.getId().toString()));
+
+        result.andExpect(status().isOk())
+            .andExpect(jsonPath("$.totalElements").value(2))
+            .andExpect(jsonPath("$.content[0].id").value(next.getId()))
+            .andExpect(jsonPath("$.content[1].id").value(last.getId()));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"0", "-1"})
+    @SneakyThrows
+    void shouldRejectRecommendationsWhenExcludedRoomIdIsNotPositive(String roomId) {
+        final var result = search("/api/v1/rooms/recommend", "USER", queryWith("excludedRoomIds", roomId));
+
+        result.andExpect(status().isBadRequest());
     }
 
     private Hotel createHotel(String name) {

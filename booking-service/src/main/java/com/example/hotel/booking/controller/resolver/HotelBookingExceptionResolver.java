@@ -1,5 +1,6 @@
 package com.example.hotel.booking.controller.resolver;
 
+import com.example.hotel.booking.gateway.exception.HotelServiceException;
 import com.example.hotel.booking.service.exception.BookingCancellationException;
 import com.example.hotel.booking.service.exception.BookingCreationException;
 import com.example.hotel.booking.service.exception.BookingIdempotencyConflictException;
@@ -37,6 +38,12 @@ import static org.springframework.http.HttpStatus.UNAUTHORIZED;
 
 @RestControllerAdvice
 class HotelBookingExceptionResolver extends ResponseEntityExceptionHandler {
+
+    @ExceptionHandler(HotelServiceException.class)
+    private static ResponseEntity<ProblemDetail> handleHotelFailure(HotelServiceException exception) {
+        return ResponseEntity.status(exception.getStatus())
+            .body(getProblemDetails(exception.getStatus(), exception.getCode(), exception.getMessage()));
+    }
 
     @ExceptionHandler(BookingCancellationException.class)
     private static ResponseEntity<ProblemDetail> handleCancellationStorageFailure(BookingCancellationException exception) {
@@ -159,8 +166,8 @@ class HotelBookingExceptionResolver extends ResponseEntityExceptionHandler {
     }
 
     private record Violation(
-        String field,
-        String message
-    ) {
+                             String field,
+                             String message
+                             ) {
     }
 }
