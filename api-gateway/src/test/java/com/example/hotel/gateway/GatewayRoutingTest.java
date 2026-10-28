@@ -1,8 +1,10 @@
 package com.example.hotel.gateway;
 
+import com.example.hotel.gateway.testutil.JwtTestTokens;
 import com.sun.net.httpserver.HttpServer;
 
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -16,12 +18,15 @@ import org.springframework.test.context.DynamicPropertySource;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
+import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
 
 import lombok.SneakyThrows;
 
+import static com.example.hotel.gateway.testutil.JwtTestTokens.USER_TOKEN;
 import static java.net.http.HttpClient.newHttpClient;
 import static java.net.http.HttpRequest.BodyPublishers.noBody;
 import static java.net.http.HttpRequest.BodyPublishers.ofString;
@@ -40,6 +45,7 @@ import static org.springframework.boot.test.context.SpringBootTest.WebEnvironmen
     }
 )
 class GatewayRoutingTest {
+    private static final AtomicReference<String> LAST_BACKEND_TRACEPARENT = new AtomicReference<>();
     private static final AtomicInteger BACKEND_REQUEST_COUNT = new AtomicInteger();
     private static final HttpServer HOTEL_BACKEND_SERVER = startTestBackendServer("hotel-service");
     private static final HttpServer BOOKING_BACKEND_SERVER = startTestBackendServer("booking-service");
@@ -49,10 +55,67 @@ class GatewayRoutingTest {
 
     @DynamicPropertySource
     static void registerTestBackendInstances(DynamicPropertyRegistry registry) {
+        JwtTestTokens.register(registry);
         registry.add("spring.cloud.discovery.client.simple.instances.hotel-service[0].uri",
             () -> "http://127.0.0.1:" + HOTEL_BACKEND_SERVER.getAddress().getPort());
         registry.add("spring.cloud.discovery.client.simple.instances.booking-service[0].uri",
             () -> "http://127.0.0.1:" + BOOKING_BACKEND_SERVER.getAddress().getPort());
+    }
+
+    @Test
+    @SneakyThrows
+    void shouldPropagateTraceWhenAuthenticatedRequestIsForwarded() {
+        final var traceId = "11111111111111111111111111111111";
+        final var traceparent = "00-" + traceId + "-2222222222222222-01";
+        try (final var client = newHttpClient()) {
+            final var request = newBuilder(URI.create("http://127.0.0.1:" + applicationPort + "/api/v1/hotels"))
+                .header("Authorization", "Bearer " + USER_TOKEN)
+                .header("traceparent", traceparent)
+                .build();
+
+            final var response = client.send(request, ofString());
+
+            assertThat(response.statusCode()).isEqualTo(200);
+            assertThat(response.headers().firstValue("X-Trace-Id")).contains(traceId);
+            assertThat(response.headers().firstValue("X-Content-Type-Options")).contains("nosniff");
+            assertThat(LAST_BACKEND_TRACEPARENT.get()).startsWith("00-" + traceId + "-");
+        }
+    }
+
+    @Test
+    @SneakyThrows
+    void shouldRejectRequestWhenBearerTokenIsMissing() {
+        final var requestsBefore = BACKEND_REQUEST_COUNT.get();
+        try (final var client = newHttpClient()) {
+            final var request = newBuilder(URI.create("http://127.0.0.1:" + applicationPort + "/api/v1/hotels")).build();
+
+            final var response = client.send(request, ofString());
+
+            assertThat(response.statusCode()).isEqualTo(401);
+            assertThat(response.body()).contains("UNAUTHORIZED");
+            assertThat(BACKEND_REQUEST_COUNT.get()).isEqualTo(requestsBefore);
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"invalid", "internal", "expired"})
+    @SneakyThrows
+    void shouldRejectRequestWhenBearerTokenIsInvalid(String reason) {
+        final var token = switch (reason) {
+            case "internal" -> JwtTestTokens.token("hotel-internal", Instant.now().plusSeconds(120));
+            case "expired" -> JwtTestTokens.token("hotel-api", Instant.now().minusSeconds(120));
+            default -> "invalid";
+        };
+        final var requestsBefore = BACKEND_REQUEST_COUNT.get();
+        try (final var client = newHttpClient()) {
+            final var request = newBuilder(URI.create("http://127.0.0.1:" + applicationPort + "/api/v1/hotels"))
+                .header("Authorization", "Bearer " + token).build();
+
+            final var response = client.send(request, ofString());
+
+            assertThat(response.statusCode()).isEqualTo(401);
+            assertThat(BACKEND_REQUEST_COUNT.get()).isEqualTo(requestsBefore);
+        }
     }
 
     @AfterAll
@@ -88,17 +151,17 @@ class GatewayRoutingTest {
         "DELETE, /api/v1/bookings/42, booking-service"
     })
     void shouldForwardRequestWhenPublicRouteMatches(String httpMethod, String requestPath, String expectedServiceName) {
-        try (var httpClient = newHttpClient()) {
-            var request = newBuilder(URI.create("http://127.0.0.1:" + applicationPort + requestPath + "?page=1&size=5"))
-                .header("Authorization", "Bearer routing-test-marker")
+        try (final var httpClient = newHttpClient()) {
+            final var request = newBuilder(URI.create("http://127.0.0.1:" + applicationPort + requestPath + "?page=1&size=5"))
+                .header("Authorization", "Bearer " + USER_TOKEN)
                 .method(httpMethod, noBody())
                 .build();
 
-            var response = httpClient.send(request, ofString());
+            final var response = httpClient.send(request, ofString());
 
             assertThat(response.statusCode()).isEqualTo(200);
             assertThat(response.body()).isEqualTo(expectedServiceName + "|" + httpMethod + "|" + requestPath
-                + "|page=1&size=5|Bearer routing-test-marker");
+                + "|page=1&size=5|Bearer " + USER_TOKEN);
         }
     }
 
@@ -155,13 +218,14 @@ class GatewayRoutingTest {
         "GET, /api/v1/booking/7/release"
     })
     void shouldRejectRequestWhenRouteIsInternalOrUnlisted(String httpMethod, String requestPath) {
-        try (var httpClient = newHttpClient()) {
-            var backendRequestCountBeforeRequest = BACKEND_REQUEST_COUNT.get();
-            var request = newBuilder(URI.create("http://127.0.0.1:" + applicationPort + requestPath))
+        try (final var httpClient = newHttpClient()) {
+            final var backendRequestCountBeforeRequest = BACKEND_REQUEST_COUNT.get();
+            final var request = newBuilder(URI.create("http://127.0.0.1:" + applicationPort + requestPath))
+                .header("Authorization", "Bearer " + USER_TOKEN)
                 .method(httpMethod, noBody())
                 .build();
 
-            var response = httpClient.send(request, ofString());
+            final var response = httpClient.send(request, ofString());
 
             assertThat(response.statusCode()).isEqualTo(404);
             assertThat(BACKEND_REQUEST_COUNT.get()).isEqualTo(backendRequestCountBeforeRequest);
@@ -175,6 +239,7 @@ class GatewayRoutingTest {
         try (final var httpClient = newHttpClient()) {
             final var requestsBefore = BACKEND_REQUEST_COUNT.get();
             final var request = newBuilder(URI.create("http://127.0.0.1:" + applicationPort + path))
+                .header("Authorization", "Bearer " + USER_TOKEN)
                 .method(method, noBody()).build();
 
             final var response = httpClient.send(request, ofString());
@@ -200,7 +265,7 @@ class GatewayRoutingTest {
         final var payload = "{\"username\":\"routing_guest\"}";
         try (final var httpClient = newHttpClient()) {
             final var request = newBuilder(URI.create("http://127.0.0.1:" + applicationPort + path))
-                .header("Authorization", "Bearer routing-test-marker")
+                .header("Authorization", "Bearer " + USER_TOKEN)
                 .header("Content-Type", "application/json")
                 .method(method, ofString(payload))
                 .build();
@@ -209,7 +274,7 @@ class GatewayRoutingTest {
 
             assertThat(response.statusCode()).isEqualTo(200);
             assertThat(response.body()).isEqualTo("booking-service|" + method + "|" + expectedPath
-                + "|" + expectedQuery + "|Bearer routing-test-marker|" + payload);
+                + "|" + expectedQuery + "|Bearer " + USER_TOKEN + "|" + payload);
         }
     }
 
@@ -225,6 +290,7 @@ class GatewayRoutingTest {
         final var before = BACKEND_REQUEST_COUNT.get();
         try (final var httpClient = newHttpClient()) {
             final var request = newBuilder(URI.create("http://127.0.0.1:" + applicationPort + path))
+                .header("Authorization", "Bearer " + USER_TOKEN)
                 .method(method, noBody()).build();
 
             final var response = httpClient.send(request, ofString());
@@ -243,6 +309,7 @@ class GatewayRoutingTest {
     void shouldPreserveErrorWhenBackendRejectsAliasRequest(int status) {
         try (final var httpClient = newHttpClient()) {
             final var request = newBuilder(URI.create("http://127.0.0.1:" + applicationPort + "/api/v1/user?id=" + status))
+                .header("Authorization", "Bearer " + USER_TOKEN)
                 .method("PATCH", noBody()).build();
 
             final var response = httpClient.send(request, ofString());
@@ -269,7 +336,7 @@ class GatewayRoutingTest {
             : "";
         try (final var client = newHttpClient()) {
             final var request = newBuilder(URI.create("http://127.0.0.1:" + applicationPort + path))
-                .header("Authorization", "Bearer routing-test-marker")
+                .header("Authorization", "Bearer " + USER_TOKEN)
                 .header("Content-Type", "application/json")
                 .method(method, ofString(payload))
                 .build();
@@ -278,7 +345,7 @@ class GatewayRoutingTest {
 
             assertThat(response.statusCode()).isEqualTo(200);
             assertThat(response.body()).isEqualTo("booking-service|" + method + "|" + expectedPath
-                + "|trace=one|Bearer routing-test-marker" + (payload.isEmpty()
+                + "|trace=one|Bearer " + USER_TOKEN + (payload.isEmpty()
                 ? ""
                 : "|" + payload));
         }
@@ -295,6 +362,7 @@ class GatewayRoutingTest {
     void shouldPreserveResponseWhenBookingAliasReturnsLocation(String method, String path, int expectedStatus) {
         try (final var client = newHttpClient()) {
             final var request = newBuilder(URI.create("http://127.0.0.1:" + applicationPort + path))
+                .header("Authorization", "Bearer " + USER_TOKEN)
                 .header("X-Test-Booking-Status", Integer.toString(expectedStatus))
                 .method(method, noBody())
                 .build();
@@ -322,6 +390,7 @@ class GatewayRoutingTest {
     void shouldPreserveErrorWhenBackendRejectsBookingAlias(String method, int expectedStatus) {
         try (final var client = newHttpClient()) {
             final var request = newBuilder(URI.create("http://127.0.0.1:" + applicationPort + "/api/v1/booking/" + expectedStatus))
+                .header("Authorization", "Bearer " + USER_TOKEN)
                 .method(method, noBody()).build();
 
             final var response = client.send(request, ofString());
@@ -347,6 +416,7 @@ class GatewayRoutingTest {
         final var requestsBefore = BACKEND_REQUEST_COUNT.get();
         try (final var client = newHttpClient()) {
             final var request = newBuilder(URI.create("http://127.0.0.1:" + applicationPort + "/api/v1/booking/" + id))
+                .header("Authorization", "Bearer " + USER_TOKEN)
                 .method(method, noBody()).build();
 
             final var response = client.send(request, ofString());
@@ -367,8 +437,9 @@ class GatewayRoutingTest {
 
     private static HttpServer startTestBackendServer(String serviceName) {
         try {
-            var backendServer = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+            final var backendServer = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
             backendServer.createContext("/", exchange -> {
+                LAST_BACKEND_TRACEPARENT.set(exchange.getRequestHeaders().getFirst("traceparent"));
                 BACKEND_REQUEST_COUNT.incrementAndGet();
                 final var path = exchange.getRequestURI().getPath();
                 if (path.matches("/api/v1/(users|bookings)/(401|403|404|409)")) {
@@ -403,7 +474,7 @@ class GatewayRoutingTest {
                     ? ""
                     : "|" + payload)).getBytes(UTF_8);
                 exchange.sendResponseHeaders(200, responseBody.length);
-                try (var responseOutput = exchange.getResponseBody()) {
+                try (final var responseOutput = exchange.getResponseBody()) {
                     responseOutput.write(responseBody);
                 }
             });

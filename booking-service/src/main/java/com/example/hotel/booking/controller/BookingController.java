@@ -6,6 +6,7 @@ import com.example.hotel.booking.controller.dto.CreateBookingRequest;
 import com.example.hotel.booking.service.BookingService;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -19,6 +20,13 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.net.URI;
 
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Positive;
+
+import lombok.RequiredArgsConstructor;
+
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.headers.Header;
@@ -26,11 +34,6 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.validation.Valid;
-import jakarta.validation.constraints.Max;
-import jakarta.validation.constraints.Min;
-import jakarta.validation.constraints.Positive;
-import lombok.RequiredArgsConstructor;
 
 import static com.example.hotel.booking.domain.BookingStatus.PENDING;
 import static org.springframework.http.HttpStatus.ACCEPTED;
@@ -44,6 +47,7 @@ import static org.springframework.http.HttpStatus.OK;
     @ApiResponse(responseCode = "401", ref = "#/components/responses/Unauthorized"),
     @ApiResponse(responseCode = "403", ref = "#/components/responses/Forbidden")
 })
+@PreAuthorize("hasRole('USER')")
 @RestController
 @RequestMapping("/api/v1/bookings")
 @RequiredArgsConstructor
@@ -74,8 +78,8 @@ class BookingController {
         @ApiResponse(responseCode = "504", ref = "#/components/responses/BookingTimeout")
     })
     @PostMapping
-    ResponseEntity<BookingResponse> createBooking(@Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt,
-                                                  @Valid @RequestBody CreateBookingRequest request) {
+    public ResponseEntity<BookingResponse> createBooking(@Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt,
+                                                         @Valid @RequestBody CreateBookingRequest request) {
         final var result = bookingService.createBooking(Long.parseLong(jwt.getSubject()), request, jwt.getTokenValue());
         final var booking = result.booking();
         final var status = result.created()
@@ -92,9 +96,9 @@ class BookingController {
         description = "Requires USER. Returns the user's bookings in all statuses, ordered by createdAt descending and ID ascending.")
     @ApiResponse(responseCode = "200", useReturnTypeSchema = true)
     @GetMapping
-    private BookingPageResponse listBookings(@Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt,
-                                             @RequestParam(defaultValue = "0") @Min(0) int page,
-                                             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
+    public BookingPageResponse listBookings(@Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt,
+                                            @RequestParam(defaultValue = "0") @Min(0) int page,
+                                            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
         return bookingService.listBookings(Long.parseLong(jwt.getSubject()), page, size);
     }
 
@@ -105,7 +109,7 @@ class BookingController {
         @ApiResponse(responseCode = "404", ref = "#/components/responses/BookingNotFound")
     })
     @GetMapping("/{id:[0-9]+}")
-    private BookingResponse getBooking(@Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt, @PathVariable @Positive long id) {
+    public BookingResponse getBooking(@Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt, @PathVariable @Positive long id) {
         return bookingService.getBooking(Long.parseLong(jwt.getSubject()), id);
     }
 
@@ -127,8 +131,8 @@ class BookingController {
         @ApiResponse(responseCode = "503", ref = "#/components/responses/BookingCancellationUnavailable")
     })
     @DeleteMapping("/{id:[0-9]+}")
-    private ResponseEntity<BookingResponse> cancelBooking(@Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt,
-                                                          @PathVariable @Positive long id) {
+    public ResponseEntity<BookingResponse> cancelBooking(@Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt,
+                                                         @PathVariable @Positive long id) {
         final var booking = bookingService.cancelBooking(Long.parseLong(jwt.getSubject()), id);
         final var status = booking.releasePending()
             ? ACCEPTED

@@ -8,6 +8,7 @@ import com.example.hotel.hotel.controller.dto.UpdateRoomRequest;
 import com.example.hotel.hotel.service.RoomService;
 
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -46,6 +47,7 @@ import static org.springframework.http.HttpStatus.NO_CONTENT;
     @ApiResponse(responseCode = "401", ref = "#/components/responses/Unauthorized"),
     @ApiResponse(responseCode = "403", ref = "#/components/responses/Forbidden")
 })
+@PreAuthorize("hasRole('ADMIN')")
 @RestController
 @RequestMapping("/api/v1/rooms")
 @RequiredArgsConstructor
@@ -63,7 +65,7 @@ class RoomController {
     })
     @PostMapping
     @ResponseStatus(CREATED)
-    private RoomResponse createRoom(@Valid @RequestBody CreateRoomRequest request) {
+    public RoomResponse createRoom(@Valid @RequestBody CreateRoomRequest request) {
         return roomService.createRoom(request);
     }
 
@@ -74,8 +76,9 @@ class RoomController {
             Search does not reserve a room.
             """)
     @ApiResponse(responseCode = "200", useReturnTypeSchema = true)
+    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
     @GetMapping
-    private RoomPageResponse listAvailableRooms(@RequestParam @DateTimeFormat(pattern = DATE_PATTERN) LocalDate startDate,
+    public RoomPageResponse listAvailableRooms(@RequestParam @DateTimeFormat(pattern = DATE_PATTERN) LocalDate startDate,
                                                @RequestParam @DateTimeFormat(pattern = DATE_PATTERN) LocalDate endDate,
                                                @RequestParam(required = false) @Positive Long hotelId,
                                                @RequestParam(defaultValue = "0") @Min(0) int page,
@@ -86,8 +89,9 @@ class RoomController {
     @Operation(summary = "Recommend available rooms",
         description = "Requires USER or ADMIN. Available rooms are ordered by timesBooked ascending, then ID ascending.")
     @ApiResponse(responseCode = "200", useReturnTypeSchema = true)
+    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
     @GetMapping("/recommend")
-    private RoomPageResponse recommendAvailableRooms(@RequestParam @DateTimeFormat(pattern = DATE_PATTERN) LocalDate startDate,
+    public RoomPageResponse recommendAvailableRooms(@RequestParam @DateTimeFormat(pattern = DATE_PATTERN) LocalDate startDate,
                                                     @RequestParam @DateTimeFormat(pattern = DATE_PATTERN) LocalDate endDate,
                                                     @RequestParam(required = false) @Positive Long hotelId,
                                                     @RequestParam(defaultValue = "0") @Min(0) int page,
@@ -104,7 +108,7 @@ class RoomController {
             """)
     @ApiResponse(responseCode = "200", useReturnTypeSchema = true)
     @GetMapping("/statistics")
-    private RoomStatisticsPageResponse getOccupancyStatistics(@RequestParam @DateTimeFormat(pattern = DATE_PATTERN) LocalDate startDate,
+    public RoomStatisticsPageResponse getOccupancyStatistics(@RequestParam @DateTimeFormat(pattern = DATE_PATTERN) LocalDate startDate,
                                                              @RequestParam @DateTimeFormat(pattern = DATE_PATTERN) LocalDate endDate,
                                                              @RequestParam(required = false) @Positive Long hotelId,
                                                              @RequestParam(defaultValue = "0") @Min(0) int page,
@@ -118,8 +122,9 @@ class RoomController {
         @ApiResponse(responseCode = "200", useReturnTypeSchema = true),
         @ApiResponse(responseCode = "404", ref = "#/components/responses/RoomNotFound")
     })
+    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
     @GetMapping("/{id:[0-9]+}")
-    private RoomResponse getRoom(@PathVariable @Positive long id) {
+    public RoomResponse getRoom(@PathVariable @Positive long id) {
         return roomService.getRoom(id);
     }
 
@@ -135,7 +140,7 @@ class RoomController {
         @ApiResponse(responseCode = "503", ref = "#/components/responses/RoomBusy")
     })
     @PatchMapping("/{id:[0-9]+}")
-    private RoomResponse updateRoom(@PathVariable @Positive long id,
+    public RoomResponse updateRoom(@PathVariable @Positive long id,
                                    @Valid @RequestBody UpdateRoomRequest request) {
         return roomService.updateRoom(id, request);
     }
@@ -150,7 +155,7 @@ class RoomController {
     })
     @DeleteMapping("/{id:[0-9]+}")
     @ResponseStatus(NO_CONTENT)
-    private void deleteRoom(@PathVariable @Positive long id) {
+    public void deleteRoom(@PathVariable @Positive long id) {
         roomService.deleteRoom(id);
     }
 }

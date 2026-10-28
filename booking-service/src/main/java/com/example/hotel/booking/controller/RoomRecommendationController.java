@@ -4,6 +4,7 @@ import com.example.hotel.booking.controller.dto.RoomPageResponse;
 import com.example.hotel.booking.service.BookingService;
 
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -24,6 +25,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 
+@PreAuthorize("hasRole('USER')")
 @RestController
 @RequiredArgsConstructor
 @SecurityRequirement(name = "userBearer")
